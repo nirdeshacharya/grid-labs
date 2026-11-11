@@ -102,3 +102,26 @@ footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--rule);
 .hb .axis { grid-column: 2; position: relative; height: 18px; font: 11px var(--mono); color: var(--ink-3); }
 .hb .axis span { position: absolute; transform: translateX(-50%); }
 .snapshot { font-size: 13px; color: var(--ink-2); background: var(--fill); padding: 8px 12px; border-radius: 2px; margin: 0 0 22px; max-width: none; }
+
+/* entry controls and column chart */
+.controls { background: var(--fill); padding: 14px 16px; border-radius: 2px; margin: 0 0 22px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 20px; }
+.controls label { display: block; font-size: 13px; color: var(--ink-2); }
+.controls label b { float: right; font: 500 13px var(--mono); color: var(--ink); }
+.controls select, .controls input[type=range] { width: 100%; margin-top: 4px; accent-color: var(--ink); }
+.controls select { font: inherit; font-size: 14px; color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 2px; padding: 5px 6px; }
+.controls .wide { grid-column: 1 / -1; }
+.controls button { font: inherit; font-size: 13px; color: var(--ink-2); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+.colchart { display: flex; align-items: flex-end; gap: 3px; height: 150px; border-bottom: 1px solid var(--ink-3); }
+.colchart .c { flex: 1; height: 100%; display: flex; flex-direction: column-reverse; gap: 2px; }
+.colchart .c i { display: block; min-height: 0; }
+.colchart .c i.a { background: var(--s1); }
+.colchart .c i.b { background: var(--s2); }
+.colchart .c i:last-of-type { border-radius: 2px 2px 0 0; }
+.colchart .c span { font: 11px var(--mono); color: var(--ink-2); text-align: center; order: 9; margin-bottom: 2px; }
+.colx { display: flex; gap: 3px; font: 11px var(--mono); color: var(--ink-3); margin-top: 4px; }
+.colx span { flex: 1; text-align: center; }
+.figs3 { display: grid; grid-template-columns: repeat(3, 1fr); border-block: 1px solid var(--rule); margin: 4px 0 18px; }
+.figs3 > div { padding: 10px 12px 10px 0; }
+.figs3 > div + div { border-left: 1px solid var(--rule); padding-left: 12px; }
+.figs3 b { display: block; font: 500 24px/1.2 var(--mono); letter-spacing: -.02em; }
+.figs3 span { font-size: 12.5px; color: var(--ink-2); line-height: 1.35; display: block; }

@@ -1,0 +1,65 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Entry 04 data build</title>
+<!-- Builds data/04-runout.json for entry 04. Steps:
+     1. python3 -m http.server 5179            (from the repository root)
+     2. open http://localhost:5179/analysis/04-run.html and wait (it downloads a 43 MB workbook)
+     3. save the JSON shown into data/04-runout.json
+     SSEN's API only answers browsers, which is why this runs here and not in Python. -->
+<body style="font:13px ui-monospace,Menlo,monospace;padding:16px">
+<p id="status">downloading SSEN's DFES workbook…</p>
+<textarea id="json" style="width:100%;height:60vh" readonly></textarea>
+<script src="../lab.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const YEARS = Array.from({ length: 15 }, (_, i) => 2026 + i);           // projection years kept
+const SCENARIOS = ['Holistic Transition', 'Electric Engagement', 'Hydrogen Evolution', 'Falling Behind'];
+const GROUPS = ['Heat pumps', 'Hybrid heat pumps', 'Electric cars and vans', 'New homes'];
+// Which DFES rows feed which group. Everything else in the workbook is left out.
+const groupOf = (tech, sub) => tech === 'Domestic heat pumps' ? (sub === 'Hybrid' ? 1 : 0)
+  : tech === 'Electric vehicles' && /cars|LGVs/.test(sub) ? 2
+  : tech === 'New developments' && sub === 'Domestic' ? 3 : -1;
+const areaOf = v => /SEPD/.test(v) ? 'SEPD' : 'SHEPD';
+
+async function run() {
+  const pkg = (await getJSON(CKAN + 'package_show?id=low_carbon_technologies')).result.resources;
+  const book = pkg.filter(r => /results by licence area and esa/i.test(r.name) && /xlsx/i.test(r.format))
+    .sort((a, b) => String(b.last_modified).localeCompare(String(a.last_modified)))[0];
+  if (!book) throw new Error('no DFES results workbook found');
+  const wb = XLSX.read(await (await fetch(book.url)).arrayBuffer(), { sheets: ['05_ESA_projections'], dense: true });
+  const R = XLSX.utils.sheet_to_json(wb.Sheets['05_ESA_projections'], { header: 1, defval: null });
+  const H = R[0], col = n => { const i = H.indexOf(n); if (i < 0) throw new Error('workbook layout changed: no column ' + n); return i; };
+  const c = { tech: col('Technology'), sub: col('Subtechnology'), scen: col('Scenario'), prim: col('Primary_name'), lic: col('Licence_area'), base: col('Baseline') }, yc = YEARS.map(col);
+
+  // Sum each primary's supply areas (one per local authority) into growth since the baseline, per scenario and group.
+  const D = new Map();
+  for (let i = 1; i < R.length; i++) {
+    const r = R[i], g = groupOf(r[c.tech], r[c.sub]), s = SCENARIOS.indexOf(r[c.scen]);
+    if (g < 0 || s < 0) continue;
+    const k = areaOf(r[c.lic]) + '|' + norm(r[c.prim]);
+    let e = D.get(k);
+    if (!e) D.set(k, e = SCENARIOS.map(() => GROUPS.map(() => new Float64Array(YEARS.length))));
+    const b = +r[c.base] || 0;
+    for (let j = 0; j < yc.length; j++) e[s][g][j] += (+r[yc[j]] || 0) - b;
+  }
+
+  const hf = await latestResource('generation-availability-and-network-capacity', /headroom dashboard data/i);
+  const head = (await fetchAll(hf.id)).filter(r => r['Substation Type'] === 'Primary');
+  const zero = [], open = [], unmatched = [], noFigure = [];
+  for (const r of head) {
+    const a = areaOf(r.map___license_area), h = num(r.estimated_demand_headroom__mva_), name = String(r.Substation).replace(/ Primary$/, '');
+    const base = { n: name, a, con: r['Demand Constraint'] || null, due: r['Substation Reinforcement Completion Date'] || null, dueUp: r['Upstream Reinforcement Completion Date'] || null };
+    if (h == null) { noFigure.push(name); continue; }
+    if (h <= 0) { zero.push(base); continue; }
+    const d = D.get(a + '|' + norm(r.Substation));
+    if (!d) { unmatched.push({ ...base, h }); continue; }
+    open.push({ ...base, h, rag: r['Substation Demand RAG Status'], d: d.map(s => s.map(g => Array.from(g, Math.round))) });
+  }
+  return { computed: new Date().toISOString(), years: YEARS, scenarios: SCENARIOS, groups: GROUPS,
+    sources: { headroom: { name: hf.name, modified: hf.modified }, dfes: { name: book.name, modified: book.last_modified } },
+    primaries: head.length, zero, open, unmatched, noFigure };
+}
+run().then(r => { window._result = r; const s = JSON.stringify(r); document.getElementById('json').value = s;
+  document.getElementById('status').textContent = `done: ${r.open.length} primaries with headroom and projections, ${r.zero.length} at zero, ${r.unmatched.length} unmatched, ${(s.length / 1024).toFixed(0)} KB`; })
+  .catch(e => { window._error = String(e); document.getElementById('status').textContent = 'failed: ' + e; });
+</script>
