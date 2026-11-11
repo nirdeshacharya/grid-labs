@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flexibility and constraint · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a> · <a href="https://nirdeshacharya.github.io/grid-lens/">Grid Lens</a></nav></div></header>
+<main>
+  <div class="entry">Entry 03 <span class="status finding">Finding</span></div>
+  <h1>Does SSEN buy flexibility where it marks the network as constrained?</h1>
+  <p class="lede">Every zone SSEN has tendered for flexibility since January 2024, set against the red, amber or green demand status it publishes for each primary substation.</p>
+  <div id="out"><p class="loading">Loading the result…</p></div>
+  <footer>Part of <a href="./">Grid Labs</a>. Not affiliated with SSEN. This compares two published lists; it is not an assessment of SSEN's procurement decisions.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+const RAG = { Red: ['--crit', '■'], Amber: ['--warn', '▲'], Green: ['--good', '●'] };
+const glyph = s => RAG[s] ? `<i style="color:var(${RAG[s][0]});font-style:normal">${RAG[s][1]}</i>` : '';
+const N = (v, d = 0) => `<b class="n">${fmt(v, d)}</b>`;
+const pct = (a, b, d = 0) => `<b class="n">${fmt(a / b * 100, d)}%</b>`;
+const month = s => s ? new Date(s + 'T12:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : '';
+const worst = z => z.subs.some(s => s.rag === 'Red') ? 'Red' : z.subs.some(s => s.rag === 'Amber') ? 'Amber' : 'Green';
+const strip = n => String(n).replace(/ (Primary|GSP|BSP)$/, '');
+const mw = v => v == null ? 'not given' : v < 1 ? fmt(v * 1000) + ' kW' : fmt(v, v < 10 ? 1 : 0) + ' MW';
+
+function render(R) {
+  const Z = R.zones, P = Z.filter(z => z.placed), L = Z.filter(z => !z.placed);
+  const by = s => P.filter(z => worst(z) === s);
+  const subs = [...new Map(P.flatMap(z => z.subs.filter(s => s.t === 'Primary')).map(s => [s.n, s])).values()];
+  const cov = R.coverage, allPrim = Object.values(cov).reduce((a, c) => a + c.total, 0);
+  const median = list => { const v = list.map(z => z.maxReq).filter(x => x != null).sort((a, b) => a - b); return v[Math.floor(v.length / 2)]; };
+  const first = Z.map(z => z.first).filter(Boolean).sort()[0], last = Z.map(z => z.last).filter(Boolean).sort().at(-1);
+  const bar = (label, n, max, color, tip) => `<div class="lab" title="${esc(label)}">${label}</div><div class="trk" data-tip="${esc(tip)}"><i style="width:${n / max * 100}%;background:var(${color})"></i></div><div class="val">${n}</div>`;
+  const green = by('Green').sort((a, b) => b.rounds - a.rounds);
+  const redShareIn = subs.filter(s => s.rag === 'Red').length / subs.length, redShareAll = cov.Red.total / allPrim;
+
+  $('#out').innerHTML = `
+  <p class="snapshot">Snapshot built ${day(R.computed)} from SSEN's flexibility contract register (updated ${day(R.sources.requirements.modified)}), ${R.sources.postcodeLists} tender postcode lists and <b>${esc(R.sources.headroom.name)}</b>.</p>
+
+  <h2>Short answer</h2>
+  <div class="answer">
+    <p>Partly. Where a flexibility zone can be tied to primary substations, ${pct(by('Red').length, P.length)} include one SSEN marks red for demand. But ${pct(cov.Red.total - cov.Red.in, cov.Red.total)} of red primaries have never been inside a flexibility zone, and two-thirds of all zones sit below the level the status covers.</p>
+  </div>
+  <p>SSEN tendered for flexibility in ${N(Z.length)} distinct zones between ${month(first)} and ${month(last)}. They fall into two very different kinds.</p>
+  <ul>
+    <li><b>${N(P.length)} substation-level zones</b> cover the area of one or more primaries. Their typical largest requirement is ${mw(median(P))}.</li>
+    <li><b>${N(L.length)} street-level zones</b> carry names such as ${esc(L.slice(0, 3).map(z => z.n).join(', '))}. Their typical largest requirement is ${mw(median(L))}, about the size of a few homes. SSEN publishes no postcode list for these, so they cannot be tied to a primary, and the red, amber, green status does not describe the low-voltage network they are on.</li>
+  </ul>
+
+  <h2>Zones that can be placed</h2>
+  <figure>
+    <div class="hb">
+      ${bar(`${glyph('Red')} Includes a red primary`, by('Red').length, P.length, '--crit', `${by('Red').length} zones include at least one primary with red demand status`)}
+      ${bar(`${glyph('Amber')} Amber at worst`, by('Amber').length, P.length, '--warn', `${by('Amber').length} zones have an amber primary and no red one`)}
+      ${bar(`${glyph('Green')} Green only`, by('Green').length, P.length, '--good', `${by('Green').length} zones contain only primaries with green demand status`)}
+    </div>
+    <figcaption>The ${P.length} substation-level zones, by the worst demand status among the primaries inside each. Bars are drawn against all ${P.length}.</figcaption>
+  </figure>
+  <p>Those zones take in ${N(subs.length)} primaries. ${pct(subs.filter(s => s.rag === 'Red').length, subs.length)} of them are red, against ${pct(cov.Red.total, allPrim)} of all SSEN primaries, so flexibility zones lean towards constrained substations by a factor of ${N(redShareIn / redShareAll, 1)}.</p>
+
+  <h2>The other way round</h2>
+  <p>Starting from the status instead: how many primaries of each colour have been inside any flexibility zone?</p>
+  <figure>
+    <div class="hb" style="--one:-10px">
+      ${['Red', 'Amber', 'Green'].filter(s => cov[s]).map(s => `<div class="lab">${glyph(s)} ${s} <small>· ${cov[s].in} of ${cov[s].total}</small></div><div class="trk" data-tip="${cov[s].in} of ${cov[s].total} ${s.toLowerCase()} primaries have been in a flexibility zone"><i style="width:${cov[s].in / cov[s].total * 100}%;background:var(${RAG[s][0]})"></i></div><div class="val">${fmt(cov[s].in / cov[s].total * 100)}%</div>`).join('')}
+    </div>
+    <figcaption>Share of primaries, by demand status, that fall inside at least one substation-level flexibility zone. Bars are drawn on a 0 to 100% scale.</figcaption>
+  </figure>
+  <p>A red primary is ${N((cov.Red.in / cov.Red.total) / (cov.Green.in / cov.Green.total), 1)} times as likely as a green one to have been in a zone. Even so, ${N(cov.Red.total - cov.Red.in)} of the ${fmt(cov.Red.total)} red primaries have had no substation-level flexibility tender in this period.</p>
+
+  <h2>Tenders where the status is green</h2>
+  <p>${N(green.length)} zones contain only green primaries. The data does not say why SSEN sought flexibility there. Possible reasons include a constraint further up the network, cover for planned work or faults, a generation constraint that the demand status does not show, or flexibility already holding the substation in the green.</p>
+  <div class="scroll"><table><thead><tr><th>Zone</th><th>Area</th><th>Primaries inside and their headroom</th><th class="r">Tender rounds</th><th class="r">Largest requirement</th></tr></thead><tbody>
+    ${green.map(z => `<tr><td>${esc(z.n)}</td><td>${z.a === 'SEPD' ? 'South' : 'North'}</td><td>${z.subs.map(s => `${esc(strip(s.n))}${s.h != null ? ` (${fmt(s.h, 1)} MVA)` : ''}`).join(', ')}</td><td class="r">${z.rounds}</td><td class="r">${mw(z.maxReq)}</td></tr>`).join('')}
+  </tbody></table></div>
+
+  <h2>Did the tenders find providers?</h2>
+  <p>${N(P.filter(z => z.contracts).length)} of the ${P.length} substation-level zones have at least one contract on SSEN's register, and ${N(L.filter(z => z.contracts).length)} of the ${L.length} street-level zones. The rest were tendered without a contract being recorded.</p>
+
+  <h2>Method</h2>
+  <ol>
+    <li>Take every row of the “Call Off Bidding Requirements” tab of SSEN's flexibility contract register and group rows into zones by name, ignoring differences in capitals and spacing. A network-wide “All zones” call is left out.</li>
+    <li>For each zone, find the primaries inside it from the postcode lists SSEN publishes alongside its tenders. Where a zone has no list, try its own name against SSEN's substation names.</li>
+    <li>Look up each primary's demand status in the headroom file.</li>
+    <li>Count contracts per zone from the “Call Off Contracts” tab.</li>
+  </ol>
+  <p>${N(P.filter(z => z.via === 'list').length)} zones were placed from a postcode list and ${N(P.filter(z => z.via === 'name').length)} by name.</p>
+  <details><summary>All ${P.length} substation-level zones</summary><div class="scroll">
+    <table><thead><tr><th>Zone</th><th>Area</th><th>Worst status</th><th>Primaries</th><th class="r">Rounds</th><th class="r">Contracts</th></tr></thead><tbody>
+    ${P.map(z => `<tr><td>${esc(z.n)}</td><td>${z.a === 'SEPD' ? 'South' : 'North'}</td><td>${glyph(worst(z))} ${worst(z)}</td><td>${z.subs.map(s => esc(strip(s.n))).join(', ')}</td><td class="r">${z.rounds}</td><td class="r">${z.contracts}</td></tr>`).join('')}
+    </tbody></table></div></details>
+
+  <h2>What this cannot tell you</h2>
+  <ul>
+    <li><b>The status is one date, the tenders span nearly three years.</b> The headroom file is from March 2026. A substation may have been red when tendered and reinforced since, or green because flexibility is working.</li>
+    <li><b>Flexibility is not only for demand.</b> SSEN also buys it for generation constraints, planned outages and fault restoration. The comparison here uses demand status alone.</li>
+    <li><b>Street-level zones are outside the comparison.</b> ${N(L.length)} zones could not be placed. They concern low-voltage circuits, which the headroom file does not cover at all.</li>
+    <li><b>Not being in a zone is not neglect.</b> A red primary with no tender may have reinforcement on the way, or no flexible customers to buy from. This data cannot distinguish those.</li>
+    <li><b>Requirement sizes are not comparable.</b> The register gives one figure per zone and round, and some figures repeat across several zones in a way that suggests a shared group total. They are shown per zone and never added up.</li>
+    <li><b>Tendered is not used.</b> This covers what SSEN asked for and contracted, not what it dispatched. SSEN's weekly dispatch reports are not analysed here.</li>
+    <li><b>Zone footprints are pooled.</b> A zone's primaries are everything listed for it across all postcode lists, so a zone whose boundary changed between tenders is treated as its widest extent.</li>
+  </ul>
+
+  <h2>Data and reproduction</h2>
+  <p>Sources, all SSEN Distribution open data: <b>${esc(R.sources.requirements.name)}</b> (${fmt(R.sources.requirements.rows)} rows) and <b>${esc(R.sources.contracts.name)}</b> (${fmt(R.sources.contracts.rows)} rows), both updated ${day(R.sources.requirements.modified)}; ${R.sources.postcodeLists} postcode-list workbooks from the long-term, short-term and day-ahead bidding datasets; <b>${esc(R.sources.headroom.name)}</b>.</p>
+  <p>The snapshot is <a href="data/03-flex.json">data/03-flex.json</a>, built by <span class="n">analysis/03-run.html</span> in the <a href="https://github.com/nirdeshacharya/grid-labs/tree/main/analysis">repository</a>.</p>`;
+}
+getJSON('data/03-flex.json').then(render).catch(e => { $('#out').innerHTML = `<p class="err">The result file could not be loaded: ${esc(e.message)}.</p>`; });
+</script>
+</body>
+</html>

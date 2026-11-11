@@ -1,0 +1,96 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Entry 03 data build</title>
+<!-- Builds data/03-flex.json for entry 03. Steps:
+     1. python3 -m http.server 5179            (from the repository root)
+     2. open http://localhost:5179/analysis/03-run.html and wait (it reads about two dozen postcode-list workbooks)
+     3. save the JSON shown into data/03-flex.json
+     SSEN's API only answers browsers, which is why this runs here and not in Python. -->
+<body style="font:13px ui-monospace,Menlo,monospace;padding:16px">
+<p id="status">reading SSEN's flexibility register and postcode lists…</p>
+<textarea id="json" style="width:100%;height:60vh" readonly></textarea>
+<script src="../lab.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const key = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');          // zone names vary in case and spacing between releases
+const areaOf = v => /SHEPD/i.test(v) ? 'SHEPD' : 'SEPD';
+const MONTHS = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+const iso = s => { const m = String(s || '').match(/(\d{1,2})-([A-Za-z]{3})-(\d{4})/); return m && MONTHS[m[2]] ? `${m[3]}-${MONTHS[m[2]]}-${m[1].padStart(2, '0')}` : null; };
+// "Chichester + Hunston", "Rownhams - North Baddesley", "North Hyde 11kV", "Stokenchurch AM" -> candidate substation names
+const parts = n => String(n).replace(/\(.*?\)/g, ' ').replace(/\b\d+(\.\d+)?\s*kV\b/gi, ' ').replace(/\b(AM|PM)\b/g, ' ')
+  .split(/\s*(?:\+|&|,|\/| and | - )\s*/i).map(s => s.trim()).filter(Boolean);
+
+async function run() {
+  const reg = (await getJSON(CKAN + 'package_show?id=flexibility-services-contract-register')).result.resources.filter(r => r.datastore_active);
+  const tab = re => { const r = reg.filter(x => re.test(x.name)).sort((a, b) => String(b.last_modified).localeCompare(String(a.last_modified)))[0]; if (!r) throw new Error('register tab missing: ' + re); return r; };
+  const reqTab = tab(/call off bidding requirements tab/i), conTab = tab(/call off contracts tab/i);
+  const [req, con] = await Promise.all([fetchAll(reqTab.id), fetchAll(conTab.id)]);
+  const hf = await latestResource('generation-availability-and-network-capacity', /headroom dashboard data/i);
+  const head = await fetchAll(hf.id);
+
+  // headroom substations by licence area + name; a primary wins over a BSP or GSP of the same name
+  const subs = new Map(), rank = { Primary: 0, BSP: 1, GSP: 2 };
+  for (const r of head) {
+    const k = areaOf(r.map___license_area) + '|' + norm(r.Substation), cur = subs.get(k);
+    const s = { n: r.Substation, t: r['Substation Type'], rag: r['Substation Demand RAG Status'], h: num(r.estimated_demand_headroom__mva_) };
+    if (!cur || rank[s.t] < rank[cur.t]) subs.set(k, s);
+  }
+
+  // postcode lists published with each tender name the primary substations inside each zone
+  const lists = new Map(), files = [];
+  for (const pkg of ['long-term-bidding', 'short-term-bidding', 'flexibility-day-ahead-bidding']) {
+    const rs = (await getJSON(CKAN + 'package_show?id=' + pkg)).result.resources.filter(r => /postcode list/i.test(r.name) && /xlsx/i.test(r.format));
+    for (const r of rs) {
+      try {
+        const wb = XLSX.read(await (await fetch(r.url)).arrayBuffer());
+        for (const sn of wb.SheetNames) {
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: null });
+          const hi = rows.findIndex(x => x && x.some(v => /^cmz/i.test(String(v || ''))) && x.some(v => /^primary/i.test(String(v || ''))));
+          if (hi < 0) continue;
+          const H = rows[hi].map(v => String(v || '')), cP = H.findIndex(h => /^primary/i.test(h)), cC = H.findIndex(h => /^cmz/i.test(h));
+          for (const x of rows.slice(hi + 1)) { if (!x[cC] || !x[cP]) continue; const k = key(x[cC]); if (!lists.has(k)) lists.set(k, new Set()); lists.get(k).add(String(x[cP]).trim()); }
+        }
+        files.push(r.name);
+      } catch { /* an unreadable workbook is skipped; the zone falls back to name matching */ }
+    }
+  }
+
+  const zones = new Map();
+  const zone = (name, area) => { const k = key(name); if (!zones.has(k)) zones.set(k, { n: String(name).trim(), a: area, rounds: new Set(), types: new Set(), maxReq: null, contracts: 0, maxCon: null }); return zones.get(k); };
+  for (const r of req) {
+    if (/^all zones$/i.test(String(r['CMZ Name']).trim())) continue; // a network-wide call, not a place
+    const z = zone(r['CMZ Name'], areaOf(r['Licence Area'])), d = iso(r['Date of Release']), mw = num(r.across_all_delivery_years_per_cmz__sum_of_peak_capacity_requ);
+    if (d) z.rounds.add(d);
+    if (r['Flexibility Service Type Required']) z.types.add(String(r['Flexibility Service Type Required']).replace(/\s+/g, ' ').trim().toLowerCase());
+    if (mw != null) z.maxReq = Math.max(z.maxReq ?? 0, mw);
+  }
+  const contractOnly = new Set();
+  for (const r of con) {
+    const z = zones.get(key(r['CMZ Name'])); if (!z) { contractOnly.add(String(r['CMZ Name']).trim()); continue; }
+    z.contracts++; const mw = num(r.contracted_capacity__mw_); if (mw != null) z.maxCon = Math.max(z.maxCon ?? 0, mw);
+  }
+
+  const inZone = new Set();
+  const out = [...zones.entries()].map(([k, z]) => {
+    const fromList = lists.has(k) ? [...lists.get(k)] : null;
+    const names = fromList || parts(z.n);
+    const found = names.map(n => subs.get(z.a + '|' + norm(n))).filter(Boolean);
+    const uniq = [...new Map(found.map(s => [s.n, s])).values()];
+    // a zone is "placed" when every name it gives resolves to a substation in the headroom file
+    const placed = uniq.length > 0 && (fromList ? true : found.length === names.length);
+    if (placed) uniq.forEach(s => inZone.add(z.a + '|' + norm(s.n)));
+    const rounds = [...z.rounds].sort();
+    return { n: z.n, a: z.a, placed, via: placed ? (fromList ? 'list' : 'name') : null, subs: placed ? uniq : [], rounds: rounds.length, first: rounds[0] || null, last: rounds.at(-1) || null,
+      maxReq: z.maxReq, contracts: z.contracts, maxCon: z.maxCon };
+  }).sort((a, b) => a.n.localeCompare(b.n));
+
+  const coverage = {};
+  for (const [k, s] of subs) { if (s.t !== 'Primary') continue; const c = coverage[s.rag] || (coverage[s.rag] = { in: 0, total: 0 }); c.total++; if (inZone.has(k)) c.in++; }
+  return { computed: new Date().toISOString(),
+    sources: { requirements: { name: reqTab.name, modified: reqTab.last_modified, rows: req.length }, contracts: { name: conTab.name, modified: conTab.last_modified, rows: con.length }, headroom: { name: hf.name, modified: hf.modified }, postcodeLists: files.length },
+    zones: out, coverage, contractOnly: [...contractOnly] };
+}
+run().then(r => { window._result = r; const s = JSON.stringify(r); document.getElementById('json').value = s;
+  document.getElementById('status').textContent = `done: ${r.zones.length} zones, ${r.zones.filter(z => z.placed).length} placed, ${(s.length / 1024).toFixed(0)} KB`; })
+  .catch(e => { window._error = String(e); document.getElementById('status').textContent = 'failed: ' + e; });
+</script>
