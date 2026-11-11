@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contracted generation at grid supply points · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a> · <a href="https://nirdeshacharya.github.io/grid-lens/">Grid Lens</a></nav></div></header>
+<main>
+  <div class="entry">Entry 01 <span class="status finding">Finding</span></div>
+  <h1>Is more generation contracted than the grid supply points can carry?</h1>
+  <p class="lede">A grid supply point is where SSEN's network meets the national transmission system. Generation connected below it that local demand does not use has to flow back up through its transformers.</p>
+  <div id="out"><p class="loading">Fetching SSEN's headroom data and computing…</p></div>
+  <footer>Part of <a href="./">Grid Labs</a>. Not affiliated with SSEN. This is a screening calculation on published figures, not a network study.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+const RAG = { Red: ['--crit', '■'], Amber: ['--warn', '▲'], Green: ['--good', '●'] };
+const glyph = s => RAG[s] ? `<i style="color:var(${RAG[s][0]})">${RAG[s][1]}</i>` : '';
+const N = (v, d = 0) => `<b class="n">${fmt(v, d)}</b>`;
+const gw = mw => fmt(mw / 1000, 1);
+
+// "2 x 120MVA + 2 x 180MVA (Shared with UKPN)" -> [120, 120, 180, 180]
+function units(text) {
+  const out = [];
+  for (const m of String(text || '').matchAll(/(\d+)\s*x\s*([\d.]+)\s*MVA/gi)) for (let i = 0; i < +m[1]; i++) out.push(+m[2]);
+  return out;
+}
+
+async function run() {
+  const file = await latestResource('generation-availability-and-network-capacity', /headroom dashboard data/i);
+  const all = (await fetchAll(file.id)).filter(r => r['Substation Type'] === 'GSP').map(r => {
+    const tx = units(r['Transformer Nameplate Ratings']), total = tx.reduce((a, b) => a + b, 0);
+    return {
+      name: String(r.Substation).replace(/ GSP$/, ''), area: /SEPD/.test(r.map___license_area) ? 'South' : 'North',
+      txText: r['Transformer Nameplate Ratings'], total, single: tx.length === 1, shared: /shared/i.test(r['Transformer Nameplate Ratings'] || ''),
+      conn: num(r.connected_generation__mw_), contr: num(r.contracted_generation__mw_), minD: num(r.minimum_observed_gross_demand__mva_),
+      status: r['Substation Generation RAG Status'], limits: r['Technical Limits Agreed at GSP'] === 'Yes',
+      due: r['Upstream Reinforcement Completion Date'] || r['Substation Reinforcement Completion Date'] || null,
+    };
+  });
+  const rows = all.filter(r => r.total > 0 && r.conn != null && r.contr != null);
+  const left = all.filter(r => !rows.includes(r));
+  for (const r of rows) { r.ratio = (r.conn + r.contr) / r.total; r.net = (r.conn + r.contr - (r.minD || 0)) / r.total; }
+  rows.sort((a, b) => b.ratio - a.ratio);
+
+  const sum = (list, f) => list.reduce((a, r) => a + (f(r) || 0), 0);
+  const conn = sum(rows, r => r.conn), contr = sum(rows, r => r.contr), plate = sum(rows, r => r.total);
+  const over = rows.filter(r => r.ratio > 1), overNet = rows.filter(r => r.net > 1), under = rows.filter(r => r.ratio <= 1);
+  const already = rows.filter(r => r.conn > r.total);
+  const by = a => { const x = rows.filter(r => r.area === a); return { n: x.length, conn: sum(x, r => r.conn), contr: sum(x, r => r.contr), plate: sum(x, r => r.total), over: x.filter(r => r.ratio > 1).length }; };
+  const south = by('South'), north = by('North');
+  const st = (list, s) => list.filter(r => r.status === s).length;
+  const top = rows[0];
+
+  // Independent cross-check: the Embedded Capacity Register counts accepted-but-unconnected sites of 1 MW and above.
+  let ecrLine = '';
+  try {
+    const ecrFile = await latestResource('embedded_capacity_register', /ECR Part 1 - 1MW/i);
+    const ecr = await fetchAll(ecrFile.id, ['Connection Status', 'accepted_to_connect_registered_capacity__mw_']);
+    const acc = sum(ecr.filter(r => r['Connection Status'] !== 'CONNECTED'), r => num(r.accepted_to_connect_registered_capacity__mw_));
+    ecrLine = `<p>As a cross-check, SSEN's Embedded Capacity Register (${esc(ecrFile.name)}) is a separate dataset that lists accepted but unconnected sites of 1 MW and above. It totals ${N(acc / 1000, 1)} GW, against ${N(sum(all, r => r.contr) / 1000, 1)} GW contracted across all grid supply points here. The two are compiled differently and at different dates, so they should be close but not equal.</p>`;
+  } catch { /* the cross-check is optional */ }
+
+  const xmax = Math.ceil(top.ratio), one = `${100 / xmax}%`;
+  const bar = r => `<div class="lab" title="${esc(r.name)}">${glyph(r.status)}${esc(r.name)}</div>
+    <div class="trk" style="--one:${one}" data-tip="${esc(r.name)} · ${r.area}\nTransformers: ${esc(r.txText)}\nConnected ${fmt(r.conn, 1)} MW · contracted ${fmt(r.contr, 1)} MW\nMinimum demand ${fmt(r.minD, 1)} MVA\nSSEN status: ${esc(r.status)}${r.limits ? '\nTechnical limits agreed' : ''}${r.due ? '\nReinforcement due ' + esc(r.due) : ''}">
+      <i class="a" style="width:${r.conn / r.total / xmax * 100}%"></i><i class="b" style="width:${r.contr / r.total / xmax * 100}%"></i></div>
+    <div class="val">${fmt(r.ratio, 1)}×</div>`;
+  const SHOW = 25;
+
+  $('#out').innerHTML = `
+  <h2>Short answer</h2>
+  <div class="answer">
+    <p>Yes, at most of them. At ${N(over.length)} of ${N(rows.length)} grid supply points, the generation already connected plus the generation contracted to connect adds up to more than the total rating of the transformers installed there.</p>
+  </div>
+  <p>Across those ${fmt(rows.length)} sites, ${N(conn / 1000, 1)} GW of generation is connected and a further ${N(contr / 1000, 1)} GW is contracted, which is ${N(contr / conn, 1)} times as much again. The transformers total ${N(plate / 1000, 1)} GVA.</p>
+  <p>The pressure is concentrated in the north of Scotland. There, contracted generation alone (${N(north.contr / 1000, 1)} GW) exceeds all installed transformer capacity (${N(north.plate / 1000, 1)} GVA). In central southern England it is ${N(south.contr / 1000, 1)} GW against ${N(south.plate / 1000, 1)} GVA.</p>
+
+  <h2>Site by site</h2>
+  <figure>
+    <div class="key"><span><span class="sq" style="background:var(--s1)"></span>Connected</span><span><span class="sq" style="background:var(--s2)"></span>Contracted, not yet connected</span><span>Vertical line: transformer rating (1×)</span></div>
+    <div class="bars" id="bars">
+      <div class="axis">${Array.from({ length: xmax + 1 }, (_, i) => `<span style="left:${i / xmax * 100}%">${i}×</span>`).join('')}</div><div></div>
+      ${rows.slice(0, SHOW).map(bar).join('')}
+    </div>
+    ${rows.length > SHOW ? `<button class="more" id="more">Show all ${rows.length} sites</button>` : ''}
+    <figcaption>Generation at each grid supply point as a multiple of its total transformer rating, largest first. The symbol before each name is SSEN's own generation status for the site: ${glyph('Red')}red, ${glyph('Amber')}amber, ${glyph('Green')}green. Hover a bar for the figures.</figcaption>
+  </figure>
+  <p>The most oversubscribed site is ${esc(top.name)}, where connected and contracted generation come to ${N(top.ratio, 1)} times the transformer rating (${esc(top.txText)}).${already.length ? ` At ${N(already.length)} sites, generation that is already connected exceeds the rating on its own: ${esc(already.map(r => r.name).join(', '))}.` : ''}</p>
+
+  <h2>Does SSEN's own status agree?</h2>
+  <p>SSEN publishes a red, amber or green generation status for each site but no headroom figure at this level. If the ratio above means anything, sites over 1× should be red.</p>
+  <table><thead><tr><th>Connected + contracted</th><th class="r">Sites</th><th class="r">${glyph('Red')} Red</th><th class="r">${glyph('Amber')} Amber</th><th class="r">${glyph('Green')} Green</th></tr></thead><tbody>
+    <tr><td>More than the transformer rating</td><td class="r">${over.length}</td><td class="r">${st(over, 'Red')}</td><td class="r">${st(over, 'Amber')}</td><td class="r">${st(over, 'Green')}</td></tr>
+    <tr><td>Within the transformer rating</td><td class="r">${under.length}</td><td class="r">${st(under, 'Red')}</td><td class="r">${st(under, 'Amber')}</td><td class="r">${st(under, 'Green')}</td></tr>
+  </tbody></table>
+  <p>${st(over, 'Red') === over.length ? `All ${over.length} sites over the line are red, so the simple ratio never contradicts SSEN's assessment in that direction.` : `${st(over, 'Red')} of the ${over.length} sites over the line are red.`} ${st(under, 'Red') ? `${st(under, 'Red')} sites within their rating are red as well, which shows that transformer rating is not the only limit: SSEN's status also reflects fault level and constraints further up the transmission system.` : ''}</p>
+
+  <h2>What is being done about it</h2>
+  <ul>
+    <li>${N(over.filter(r => r.due).length)} of the ${over.length} oversubscribed sites have reinforcement works listed with a completion date.</li>
+    <li>${N(over.filter(r => r.limits).length)} have technical limits agreed, an arrangement that lets generation connect ahead of reinforcement on condition that its export can be curtailed.</li>
+    <li>${N(over.filter(r => !r.due && !r.limits).length)} have neither in the published data. Some sites have both, so the three figures do not add up to ${over.length}.</li>
+  </ul>
+
+  <h2>Method</h2>
+  <ol>
+    <li>Take every row of type GSP from SSEN's headroom file.</li>
+    <li>Read the transformer nameplate text, for example “2 x 120MVA + 2 x 180MVA”, and add up the units to get the site's total rating.</li>
+    <li>Divide connected plus contracted generation by that rating.</li>
+  </ol>
+  <pre>ratio = (connected generation MW + contracted generation MW) / total transformer rating MVA</pre>
+  <p>Local demand absorbs some generation before it reaches the transformers. Subtracting each site's minimum observed demand, the least help demand ever gives, ${N(overNet.length)} sites are still over 1×, against ${over.length} without it.</p>
+  ${ecrLine}
+
+  <h2>What this cannot tell you</h2>
+  <ul>
+    <li><b>Contracted is not built.</b> Projects with an accepted offer are often delayed, resized or cancelled. The ratio describes commitments on paper.</li>
+    <li><b>Nameplate is not export capacity.</b> The real limit depends on how many transformers must stay in reserve, reverse-power ratings, protection and the transmission system above. Most of these make the true limit lower than nameplate, so the comparison here is generous.</li>
+    <li><b>MW is treated as MVA.</b> Generation is published in MW and ratings in MVA. Treating them as equal slightly understates loading.</li>
+    <li><b>Not everything exports at once.</b> Wind, solar and batteries rarely all peak together, and batteries count as generation in SSEN's figures. That is why technical limits and curtailment schemes can connect more than a simple sum allows.</li>
+    <li><b>Shared sites.</b> ${N(rows.filter(r => r.shared).length)} sites are shared with another network operator, whose generation and demand are not in these figures.</li>
+    <li><b>Single-transformer sites.</b> ${N(rows.filter(r => r.single).length)} sites have one transformer, so they have no spare unit if it fails.</li>
+    ${left.length ? `<li><b>Left out.</b> ${esc(left.map(r => r.name).join(', '))} ${left.length === 1 ? 'has' : 'have'} no transformer rating or generation figure published and ${left.length === 1 ? 'is' : 'are'} not counted.</li>` : ''}
+  </ul>
+
+  <h2>Data</h2>
+  <p>Source: <b>${esc(file.name)}</b>, SSEN Distribution open data, updated ${day(file.modified)}. Computed in your browser just now, ${new Date().toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' })}; the figures in the text above come from this calculation and will change when SSEN publishes a new file.</p>
+  <details><summary>All ${rows.length} sites as a table</summary><div class="scroll">
+    <table><thead><tr><th>Grid supply point</th><th>Area</th><th>Transformers</th><th class="r">Connected MW</th><th class="r">Contracted MW</th><th class="r">Min demand MVA</th><th class="r">Ratio</th><th>SSEN status</th><th>Reinforcement due</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${esc(r.name)}</td><td>${r.area}</td><td>${esc(r.txText)}</td><td class="r">${fmt(r.conn, 1)}</td><td class="r">${fmt(r.contr, 1)}</td><td class="r">${fmt(r.minD, 1)}</td><td class="r">${fmt(r.ratio, 2)}</td><td>${glyph(r.status)} ${esc(r.status)}</td><td>${esc(r.due || '')}</td></tr>`).join('')}
+    </tbody></table></div></details>`;
+
+  $('#more')?.addEventListener('click', e => { $('#bars').insertAdjacentHTML('beforeend', rows.slice(SHOW).map(bar).join('')); e.target.remove(); });
+}
+run().catch(e => { $('#out').innerHTML = `<p class="err">This entry could not be computed: ${esc(e.message)}. SSEN's data may be unavailable, or its layout may have changed. Reload to try again.</p>`; });
+</script>
+</body>
+</html>

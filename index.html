@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="https://nirdeshacharya.github.io/grid-lens/">Grid Lens</a></nav></div></header>
+<main>
+  <h1>A notebook of experiments on SSEN's open network data</h1>
+  <p class="lede">Each entry asks one question of the data published by Scottish and Southern Electricity Networks, shows how it was answered, and says what the answer cannot support.</p>
+  <p><a href="https://nirdeshacharya.github.io/grid-lens/">Grid Lens</a> shows the data as SSEN publishes it. Grid Labs combines it to test ideas, so results here are provisional and some will turn out to be wrong.</p>
+
+  <ol class="entries">
+    <li>
+      <span class="num">01</span>
+      <div>
+        <h3><a href="01-contracted-generation.html">Is more generation contracted than the grid supply points can carry?</a></h3>
+        <p>Connected and contracted generation at each grid supply point, set against the transformer capacity installed there.</p>
+        <div class="meta"><span class="status finding">Finding</span>Recomputed from SSEN's data each time the page opens</div>
+      </div>
+    </li>
+    <li>
+      <span class="num">02</span>
+      <div>
+        <h3>Do faults rise with wind, and where do they rise most?</h3>
+        <p>Ten years of high-voltage fault records joined to historical wind, to measure how sensitive each area is to storms.</p>
+        <div class="meta"><span class="status">Planned</span>Needs a historical weather source</div>
+      </div>
+    </li>
+    <li>
+      <span class="num">03</span>
+      <div>
+        <h3>Does SSEN buy flexibility where it marks the network as constrained?</h3>
+        <p>Day-ahead flexibility zones compared with the headroom status of the substations inside them.</p>
+        <div class="meta"><span class="status">Planned</span></div>
+      </div>
+    </li>
+    <li>
+      <span class="num">04</span>
+      <div>
+        <h3>Which primaries will run out of headroom before their reinforcement arrives?</h3>
+        <p>Spare capacity, contracted demand and low-carbon uptake set against planned reinforcement dates.</p>
+        <div class="meta"><span class="status">Planned</span>Needs several months of archived releases, as SSEN publishes only the latest</div>
+      </div>
+    </li>
+  </ol>
+
+  <footer>Built on the <a href="https://data.ssen.co.uk">SSEN Distribution open data portal</a>. Not affiliated with SSEN. Nothing here is a substitute for a connection application or engineering study.</footer>
+</main>
+</body>
+</html>
