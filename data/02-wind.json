@@ -1,0 +1,631 @@
+{
+ "computed": "2026-11-11T11:06:07.261Z",
+ "period": [
+  "2016-01-01",
+  "2025-12-31"
+ ],
+ "districts": 31,
+ "districtDays": 113243,
+ "faults": {
+  "published": 75103,
+  "used": 67920,
+  "outsidePeriod": 7052,
+  "unknownDistrict": 131
+ },
+ "sources": [
+  {
+   "name": "NaFIRS HV Faults (SHEPD)",
+   "modified": "2026-11-10T10:53:25.708655"
+  },
+  {
+   "name": "NaFIRS HV Faults (SEPD)",
+   "modified": "2026-11-10T10:51:32.629820"
+  }
+ ],
+ "thresholds": {
+  "calmBelow": 30,
+  "windyFrom": 50
+ },
+ "windCauses": [
+  "6",
+  "21",
+  "23",
+  "24"
+ ],
+ "bins": [
+  {
+   "lo": 0,
+   "hi": 20,
+   "days": 28367,
+   "faults": 14868,
+   "perDay": 0.524,
+   "ratio": 0.992,
+   "windShare": 0.109,
+   "excShare": 0.0461,
+   "cml": 347172706
+  },
+  {
+   "lo": 20,
+   "hi": 30,
+   "days": 44965,
+   "faults": 23321,
+   "perDay": 0.519,
+   "ratio": 1.01,
+   "windShare": 0.13,
+   "excShare": 0.0753,
+   "cml": 508407776
+  },
+  {
+   "lo": 30,
+   "hi": 40,
+   "days": 25975,
+   "faults": 14615,
+   "perDay": 0.563,
+   "ratio": 1.09,
+   "windShare": 0.157,
+   "excShare": 0.0658,
+   "cml": 381761146
+  },
+  {
+   "lo": 40,
+   "hi": 50,
+   "days": 9705,
+   "faults": 7082,
+   "perDay": 0.73,
+   "ratio": 1.45,
+   "windShare": 0.283,
+   "excShare": 0.165,
+   "cml": 187663498
+  },
+  {
+   "lo": 50,
+   "hi": 60,
+   "days": 3056,
+   "faults": 4238,
+   "perDay": 1.39,
+   "ratio": 2.87,
+   "windShare": 0.552,
+   "excShare": 0.421,
+   "cml": 257694304
+  },
+  {
+   "lo": 60,
+   "hi": 70,
+   "days": 893,
+   "faults": 2432,
+   "perDay": 2.72,
+   "ratio": 5.89,
+   "windShare": 0.741,
+   "excShare": 0.676,
+   "cml": 372359400
+  },
+  {
+   "lo": 70,
+   "hi": null,
+   "days": 282,
+   "faults": 1364,
+   "perDay": 4.84,
+   "ratio": 10.2,
+   "windShare": 0.737,
+   "excShare": 0.761,
+   "cml": 206074857
+  }
+ ],
+ "share": {
+  "days": 0.0374,
+  "faults": 0.118,
+  "cml": 0.37
+ },
+ "byDistrict": [
+  {
+   "key": "SHEPD/N/EAST",
+   "calmDays": 2415,
+   "calmFaults": 4487,
+   "windyDays": 68,
+   "windyFaults": 1437,
+   "ratio": 11.4,
+   "lo": 10.7,
+   "hi": 12.1,
+   "ratio4050": 1.42,
+   "p99": 53.5
+  },
+  {
+   "key": "SHEPD/HIGH",
+   "calmDays": 2332,
+   "calmFaults": 3575,
+   "windyDays": 80,
+   "windyFaults": 637,
+   "ratio": 5.19,
+   "lo": 4.77,
+   "hi": 5.65,
+   "ratio4050": 1.5,
+   "p99": 55.5
+  },
+  {
+   "key": "SHEPD/TAYCEN",
+   "calmDays": 2950,
+   "calmFaults": 4350,
+   "windyDays": 31,
+   "windyFaults": 619,
+   "ratio": 13.5,
+   "lo": 12.4,
+   "hi": 14.7,
+   "ratio4050": 3.22,
+   "p99": 49.2
+  },
+  {
+   "key": "SHEPD/ARGYLL",
+   "calmDays": 1922,
+   "calmFaults": 2129,
+   "windyDays": 254,
+   "windyFaults": 1217,
+   "ratio": 4.33,
+   "lo": 4.03,
+   "hi": 4.64,
+   "ratio4050": 1.38,
+   "p99": 66.9
+  },
+  {
+   "key": "SEPD/POOL",
+   "calmDays": 2442,
+   "calmFaults": 1561,
+   "windyDays": 101,
+   "windyFaults": 197,
+   "ratio": 3.05,
+   "lo": 2.63,
+   "hi": 3.54,
+   "ratio4050": 1.25,
+   "p99": 56.4
+  },
+  {
+   "key": "SEPD/MELK",
+   "calmDays": 2605,
+   "calmFaults": 1623,
+   "windyDays": 65,
+   "windyFaults": 174,
+   "ratio": 4.3,
+   "lo": 3.67,
+   "hi": 5.02,
+   "ratio4050": 1.5,
+   "p99": 53.5
+  },
+  {
+   "key": "SEPD/OXFN",
+   "calmDays": 2574,
+   "calmFaults": 1411,
+   "windyDays": 60,
+   "windyFaults": 146,
+   "ratio": 4.44,
+   "lo": 3.74,
+   "hi": 5.26,
+   "ratio4050": 1.65,
+   "p99": 52.8
+  },
+  {
+   "key": "SEPD/SWIN",
+   "calmDays": 2599,
+   "calmFaults": 1416,
+   "windyDays": 64,
+   "windyFaults": 111,
+   "ratio": 3.18,
+   "lo": 2.62,
+   "hi": 3.86,
+   "ratio4050": 1.35,
+   "p99": 52.8
+  },
+  {
+   "key": "SHEPD/SHET",
+   "calmDays": 1551,
+   "calmFaults": 597,
+   "windyDays": 357,
+   "windyFaults": 358,
+   "ratio": 2.61,
+   "lo": 2.29,
+   "hi": 2.97,
+   "ratio4050": 1.95,
+   "p99": 66.4
+  },
+  {
+   "key": "SHEPD/WISLES",
+   "calmDays": 1131,
+   "calmFaults": 459,
+   "windyDays": 777,
+   "windyFaults": 647,
+   "ratio": 2.05,
+   "lo": 1.82,
+   "hi": 2.31,
+   "ratio4050": 1.07,
+   "p99": 80.5
+  },
+  {
+   "key": "SHEPD/ORKN",
+   "calmDays": 1283,
+   "calmFaults": 591,
+   "windyDays": 568,
+   "windyFaults": 431,
+   "ratio": 1.65,
+   "lo": 1.45,
+   "hi": 1.87,
+   "ratio4050": 1.06,
+   "p99": 73.4
+  },
+  {
+   "key": "SEPD/OXFS",
+   "calmDays": 2582,
+   "calmFaults": 1234,
+   "windyDays": 62,
+   "windyFaults": 113,
+   "ratio": 3.81,
+   "lo": 3.15,
+   "hi": 4.62,
+   "ratio4050": 1.8,
+   "p99": 53
+  },
+  {
+   "key": "SEPD/NEWF",
+   "calmDays": 2543,
+   "calmFaults": 1149,
+   "windyDays": 82,
+   "windyFaults": 182,
+   "ratio": 4.91,
+   "lo": 4.2,
+   "hi": 5.74,
+   "ratio4050": 1.65,
+   "p99": 55.7
+  },
+  {
+   "key": "SEPD/PETE",
+   "calmDays": 2411,
+   "calmFaults": 927,
+   "windyDays": 87,
+   "windyFaults": 215,
+   "ratio": 6.43,
+   "lo": 5.54,
+   "hi": 7.46,
+   "ratio4050": 1.75,
+   "p99": 55.5
+  },
+  {
+   "key": "SEPD/BASI",
+   "calmDays": 2533,
+   "calmFaults": 982,
+   "windyDays": 66,
+   "windyFaults": 121,
+   "ratio": 4.73,
+   "lo": 3.92,
+   "hi": 5.71,
+   "ratio4050": 1.51,
+   "p99": 54.6
+  },
+  {
+   "key": "SEPD/REAN",
+   "calmDays": 2621,
+   "calmFaults": 1018,
+   "windyDays": 59,
+   "windyFaults": 110,
+   "ratio": 4.8,
+   "lo": 3.94,
+   "hi": 5.84,
+   "ratio4050": 1.38,
+   "p99": 52.8
+  },
+  {
+   "key": "SEPD/ALDE",
+   "calmDays": 2506,
+   "calmFaults": 926,
+   "windyDays": 72,
+   "windyFaults": 138,
+   "ratio": 5.19,
+   "lo": 4.34,
+   "hi": 6.2,
+   "ratio4050": 1.54,
+   "p99": 55
+  },
+  {
+   "key": "SEPD/REAS",
+   "calmDays": 2583,
+   "calmFaults": 924,
+   "windyDays": 67,
+   "windyFaults": 129,
+   "ratio": 5.38,
+   "lo": 4.48,
+   "hi": 6.47,
+   "ratio4050": 1.26,
+   "p99": 53.9
+  },
+  {
+   "key": "SEPD/CHIC",
+   "calmDays": 2315,
+   "calmFaults": 864,
+   "windyDays": 127,
+   "windyFaults": 118,
+   "ratio": 2.49,
+   "lo": 2.05,
+   "hi": 3.02,
+   "ratio4050": 1.19,
+   "p99": 58.8
+  },
+  {
+   "key": "SEPD/SALI",
+   "calmDays": 2520,
+   "calmFaults": 866,
+   "windyDays": 74,
+   "windyFaults": 147,
+   "ratio": 5.78,
+   "lo": 4.85,
+   "hi": 6.88,
+   "ratio4050": 1.71,
+   "p99": 54.1
+  },
+  {
+   "key": "SEPD/SLOU",
+   "calmDays": 2704,
+   "calmFaults": 975,
+   "windyDays": 49,
+   "windyFaults": 46,
+   "ratio": 2.6,
+   "lo": 1.94,
+   "hi": 3.5,
+   "ratio4050": 1.43,
+   "p99": 51.9
+  },
+  {
+   "key": "SEPD/YEOV",
+   "calmDays": 2432,
+   "calmFaults": 777,
+   "windyDays": 92,
+   "windyFaults": 132,
+   "ratio": 4.49,
+   "lo": 3.73,
+   "hi": 5.4,
+   "ratio4050": 1.46,
+   "p99": 56.4
+  },
+  {
+   "key": "SEPD/NEWB",
+   "calmDays": 2507,
+   "calmFaults": 722,
+   "windyDays": 75,
+   "windyFaults": 96,
+   "ratio": 4.44,
+   "lo": 3.59,
+   "hi": 5.5,
+   "ratio4050": 1.49,
+   "p99": 54.6
+  },
+  {
+   "key": "SEPD/BOUR",
+   "calmDays": 2221,
+   "calmFaults": 678,
+   "windyDays": 158,
+   "windyFaults": 129,
+   "ratio": 2.67,
+   "lo": 2.22,
+   "hi": 3.23,
+   "ratio4050": 1.08,
+   "p99": 61.1
+  },
+  {
+   "key": "SEPD/BRAC",
+   "calmDays": 2618,
+   "calmFaults": 762,
+   "windyDays": 64,
+   "windyFaults": 61,
+   "ratio": 3.27,
+   "lo": 2.52,
+   "hi": 4.25,
+   "ratio4050": 1.07,
+   "p99": 53.7
+  },
+  {
+   "key": "SEPD/ANDO",
+   "calmDays": 2496,
+   "calmFaults": 681,
+   "windyDays": 65,
+   "windyFaults": 87,
+   "ratio": 4.91,
+   "lo": 3.92,
+   "hi": 6.13,
+   "ratio4050": 1.64,
+   "p99": 53.9
+  },
+  {
+   "key": "SEPD/PORT",
+   "calmDays": 2204,
+   "calmFaults": 522,
+   "windyDays": 139,
+   "windyFaults": 51,
+   "ratio": 1.55,
+   "lo": 1.16,
+   "hi": 2.07,
+   "ratio4050": 1,
+   "p99": 60.4
+  },
+  {
+   "key": "SEPD/ISLE",
+   "calmDays": 1851,
+   "calmFaults": 432,
+   "windyDays": 273,
+   "windyFaults": 125,
+   "ratio": 1.96,
+   "lo": 1.61,
+   "hi": 2.39,
+   "ratio4050": 0.962,
+   "p99": 64.6
+  },
+  {
+   "key": "SEPD/SOTN",
+   "calmDays": 2543,
+   "calmFaults": 594,
+   "windyDays": 82,
+   "windyFaults": 30,
+   "ratio": 1.57,
+   "lo": 1.09,
+   "hi": 2.26,
+   "ratio4050": 1.34,
+   "p99": 55.7
+  },
+  {
+   "key": "SEPD/WLON",
+   "calmDays": 2638,
+   "calmFaults": 542,
+   "windyDays": 61,
+   "windyFaults": 12,
+   "ratio": 0.957,
+   "lo": 0.54,
+   "hi": 1.7,
+   "ratio4050": 0.988,
+   "p99": 52.8
+  },
+  {
+   "key": "SEPD/EGHA",
+   "calmDays": 2700,
+   "calmFaults": 415,
+   "windyDays": 52,
+   "windyFaults": 18,
+   "ratio": 2.25,
+   "lo": 1.4,
+   "hi": 3.61,
+   "ratio4050": 1.21,
+   "p99": 52.8
+  }
+ ],
+ "winter": {
+  "bins": [
+   {
+    "lo": 0,
+    "days": 13254,
+    "faults": 6372,
+    "ratio": 0.965
+   },
+   {
+    "lo": 20,
+    "days": 18692,
+    "faults": 9241,
+    "ratio": 1.03
+   },
+   {
+    "lo": 30,
+    "days": 14329,
+    "faults": 8200,
+    "ratio": 1.18
+   },
+   {
+    "lo": 40,
+    "days": 6787,
+    "faults": 5179,
+    "ratio": 1.6
+   },
+   {
+    "lo": 50,
+    "days": 2416,
+    "faults": 3555,
+    "ratio": 3.17
+   },
+   {
+    "lo": 60,
+    "days": 769,
+    "faults": 2291,
+    "ratio": 6.71
+   },
+   {
+    "lo": 70,
+    "days": 266,
+    "faults": 1324,
+    "ratio": 11.1
+   }
+  ],
+  "share": {
+   "days": 0.0611,
+   "faults": 0.198,
+   "cml": 0.523
+  }
+ },
+ "medianFaultsPerDay": 15,
+ "topDays": [
+  {
+   "date": "2021-11-26",
+   "faults": 641,
+   "cml": 240630739,
+   "maxGust": 73.4,
+   "districtsOver50": 6
+  },
+  {
+   "date": "2022-02-18",
+   "faults": 544,
+   "cml": 179057518,
+   "maxGust": 84.8,
+   "districtsOver50": 24
+  },
+  {
+   "date": "2022-01-29",
+   "faults": 398,
+   "cml": 84959443,
+   "maxGust": 85.9,
+   "districtsOver50": 6
+  },
+  {
+   "date": "2025-01-24",
+   "faults": 384,
+   "cml": 60759071,
+   "maxGust": 87.5,
+   "districtsOver50": 22
+  },
+  {
+   "date": "2025-03-10",
+   "faults": 378,
+   "cml": 102033400,
+   "maxGust": 45.2,
+   "districtsOver50": 0
+  },
+  {
+   "date": "2025-04-08",
+   "faults": 315,
+   "cml": 40082682,
+   "maxGust": 19.7,
+   "districtsOver50": 0
+  },
+  {
+   "date": "2023-12-27",
+   "faults": 249,
+   "cml": 21375328,
+   "maxGust": 74.5,
+   "districtsOver50": 10
+  },
+  {
+   "date": "2024-07-12",
+   "faults": 246,
+   "cml": 28650944,
+   "maxGust": 24.2,
+   "districtsOver50": 0
+  },
+  {
+   "date": "2020-09-02",
+   "faults": 228,
+   "cml": 14278750,
+   "maxGust": 59.3,
+   "districtsOver50": 2
+  },
+  {
+   "date": "2023-02-17",
+   "faults": 207,
+   "cml": 21243471,
+   "maxGust": 92.6,
+   "districtsOver50": 5
+  },
+  {
+   "date": "2022-01-30",
+   "faults": 204,
+   "cml": 44289377,
+   "maxGust": 97.8,
+   "districtsOver50": 5
+  },
+  {
+   "date": "2023-10-19",
+   "faults": 177,
+   "cml": 7438915,
+   "maxGust": 66.7,
+   "districtsOver50": 4
+  }
+ ]
+}

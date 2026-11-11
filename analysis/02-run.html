@@ -1,0 +1,82 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Entry 02 analysis run</title>
+<!-- Reproduces the figures in entry 02. Steps:
+     1. python3 analysis/fetch_wind.py        (writes analysis/cache/wind.json)
+     2. python3 -m http.server 5179           (from the repository root)
+     3. open http://localhost:5179/analysis/02-run.html and copy the JSON into data/02-wind.json
+     SSEN's API only answers browsers, which is why the join runs here and not in Python. -->
+<body style="font:13px ui-monospace,Menlo,monospace;white-space:pre-wrap;padding:16px">running…
+<script src="../lab.js"></script>
+<script>
+const HV = { SHEPD: '245d5825-7d83-4d17-a2c5-04b473b9b408', SEPD: 'f0d9d3fe-6739-4700-a699-f227b4e1de41' };
+const FIELDS = ['DISTRICT_SHORT_CODE', 'HV_INCIDENT_TIME', 'CAUSE_CODE', 'EXCEPTIONAL_EVENT', 'HV_CUST_MINS_LOST'];
+const WIND_CAUSES = new Set(['6', '21', '23', '24']); // wind and gale, windborne materials, falling live trees, falling dead trees
+const BINS = [0, 20, 30, 40, 50, 60, 70, Infinity];   // daily maximum gust, mph
+const CALM = 30, WINDY = 50;
+const r3 = x => x == null || !Number.isFinite(x) ? null : +x.toPrecision(3);
+
+async function run() {
+  const wind = await getJSON('cache/wind.json');
+  const dayIx = new Map(wind.days.map((d, i) => [d, i])), nDays = wind.days.length;
+  const keys = Object.keys(wind.gust);
+  const [n, s, mn, ms] = await Promise.all([fetchAll(HV.SHEPD, FIELDS), fetchAll(HV.SEPD, FIELDS),
+    getJSON(CKAN + 'resource_show?id=' + HV.SHEPD), getJSON(CKAN + 'resource_show?id=' + HV.SEPD)]);
+
+  // per district: faults, wind-attributed faults, exceptional-flagged faults and customer-minutes lost, by day
+  const D = Object.fromEntries(keys.map(k => [k, { f: new Uint16Array(nDays), w: new Uint16Array(nDays), x: new Uint16Array(nDays), cml: new Float64Array(nDays) }]));
+  const dropped = { outsidePeriod: 0, unknownDistrict: 0 };
+  let used = 0;
+  for (const [area, rows] of [['SHEPD', n], ['SEPD', s]]) for (const r of rows) {
+    const d = D[area + '/' + r.DISTRICT_SHORT_CODE], i = dayIx.get(String(r.HV_INCIDENT_TIME).slice(0, 10));
+    if (!d) { dropped.unknownDistrict++; continue; }
+    if (i == null) { dropped.outsidePeriod++; continue; }
+    used++; d.f[i]++; d.cml[i] += +r.HV_CUST_MINS_LOST || 0;
+    if (WIND_CAUSES.has(String(r.CAUSE_CODE))) d.w[i]++;
+    if (r.EXCEPTIONAL_EVENT === 'Yes') d.x[i]++;
+  }
+
+  const binOf = g => { for (let b = 0; b < BINS.length - 1; b++) if (g < BINS[b + 1]) return b; };
+  const mkBins = () => BINS.slice(0, -1).map((lo, b) => ({ lo, hi: Number.isFinite(BINS[b + 1]) ? BINS[b + 1] : null, days: 0, faults: 0, wind: 0, exc: 0, cml: 0, expected: 0 }));
+  const analyse = monthOk => {
+    const bins = mkBins(), districts = [];
+    for (const k of keys) {
+      const g = wind.gust[k], d = D[k];
+      let cd = 0, cf = 0, wd = 0, wf = 0, md = 0, mf = 0;
+      for (let i = 0; i < nDays; i++) {
+        if (g[i] == null || !monthOk(+wind.days[i].slice(5, 7))) continue;
+        if (g[i] < CALM) { cd++; cf += d.f[i]; } else if (g[i] >= WINDY) { wd++; wf += d.f[i]; } else if (g[i] >= 40) { md++; mf += d.f[i]; }
+      }
+      const calmRate = cf / cd;
+      for (let i = 0; i < nDays; i++) {
+        if (g[i] == null || !monthOk(+wind.days[i].slice(5, 7))) continue;
+        const b = bins[binOf(g[i])];
+        b.days++; b.faults += d.f[i]; b.wind += d.w[i]; b.exc += d.x[i]; b.cml += d.cml[i]; b.expected += calmRate; // expected if every day were calm in this district
+      }
+      const ratio = wd && cf && wf ? (wf / wd) / calmRate : null, se = ratio ? Math.sqrt(1 / wf + 1 / cf) : null;
+      districts.push({ key: k, calmDays: cd, calmFaults: cf, windyDays: wd, windyFaults: wf, ratio: r3(ratio), lo: r3(ratio && ratio * Math.exp(-1.96 * se)), hi: r3(ratio && ratio * Math.exp(1.96 * se)),
+        ratio4050: md && cf ? r3((mf / md) / calmRate) : null, p99: r3([...g].filter(v => v != null).sort((a, b) => a - b)[Math.floor(nDays * .99)]) });
+    }
+    return { bins: bins.map(b => ({ lo: b.lo, hi: b.hi, days: b.days, faults: b.faults, perDay: r3(b.faults / b.days), ratio: r3(b.faults / b.expected), windShare: r3(b.wind / b.faults), excShare: r3(b.exc / b.faults), cml: Math.round(b.cml) })), districts };
+  };
+  const all = analyse(() => true), winter = analyse(m => m >= 10 || m <= 3);
+  const tot = (bs, f) => bs.reduce((a, b) => a + f(b), 0), windy = bs => bs.filter(b => b.lo >= WINDY);
+  const share = bs => ({ days: r3(tot(windy(bs), b => b.days) / tot(bs, b => b.days)), faults: r3(tot(windy(bs), b => b.faults) / tot(bs, b => b.faults)), cml: r3(tot(windy(bs), b => b.cml) / tot(bs, b => b.cml)) });
+
+  // the worst days across the whole network
+  const byDay = wind.days.map((date, i) => ({ date, faults: keys.reduce((a, k) => a + D[k].f[i], 0), cml: Math.round(keys.reduce((a, k) => a + D[k].cml[i], 0)), maxGust: Math.max(...keys.map(k => wind.gust[k][i] ?? 0)), districtsOver50: keys.filter(k => wind.gust[k][i] >= WINDY).length }));
+  const median = [...byDay].sort((a, b) => a.faults - b.faults)[Math.floor(nDays / 2)].faults;
+  const topDays = [...byDay].sort((a, b) => b.faults - a.faults).slice(0, 12);
+
+  return {
+    computed: new Date().toISOString(), period: [wind.days[0], wind.days.at(-1)], districts: keys.length, districtDays: tot(all.bins, b => b.days),
+    faults: { published: n.length + s.length, used, ...dropped },
+    sources: [{ name: mn.result.name + ' (SHEPD)', modified: mn.result.last_modified }, { name: ms.result.name + ' (SEPD)', modified: ms.result.last_modified }],
+    thresholds: { calmBelow: CALM, windyFrom: WINDY }, windCauses: [...WIND_CAUSES],
+    bins: all.bins, share: share(all.bins), byDistrict: all.districts,
+    winter: { bins: winter.bins.map(b => ({ lo: b.lo, days: b.days, faults: b.faults, ratio: b.ratio })), share: share(winter.bins) },
+    medianFaultsPerDay: median, topDays,
+  };
+}
+run().then(r => { window._result = r; document.body.textContent = JSON.stringify(r); }).catch(e => { window._error = String(e); document.body.textContent = 'failed: ' + e; });
+</script>

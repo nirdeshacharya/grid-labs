@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wind and faults · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a> · <a href="https://nirdeshacharya.github.io/grid-lens/">Grid Lens</a></nav></div></header>
+<main>
+  <div class="entry">Entry 02 <span class="status finding">Finding</span></div>
+  <h1>Do faults rise with wind, and where do they rise most?</h1>
+  <p class="lede">Ten years of SSEN's high-voltage fault records, matched day by day to the strongest wind gust in each of its 31 reporting districts.</p>
+  <div id="out"><p class="loading">Loading the result…</p></div>
+  <footer>Part of <a href="./">Grid Labs</a>. Not affiliated with SSEN. This is a statistical association in published records, not an engineering assessment of any circuit.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+// SSEN publishes district short codes only. These names are my reading of the codes, checked against where each district's substations sit.
+const DISTRICT = { 'N/EAST': 'North East Scotland', HIGH: 'Highland', TAYCEN: 'Tayside and Central', ARGYLL: 'Argyll and West Highland', SHET: 'Shetland', WISLES: 'Western Isles', ORKN: 'Orkney',
+  POOL: 'Poole', MELK: 'Melksham', OXFN: 'Oxford North', SWIN: 'Swindon', OXFS: 'Oxford South', NEWF: 'New Forest', PETE: 'Petersfield', BASI: 'Basingstoke', REAN: 'Reading North', ALDE: 'Aldershot',
+  REAS: 'Reading South', CHIC: 'Chichester', SALI: 'Salisbury', SLOU: 'Slough', YEOV: 'Yeovil', NEWB: 'Newbury', BOUR: 'Bournemouth', BRAC: 'Bracknell', ANDO: 'Andover', PORT: 'Portsmouth',
+  ISLE: 'Isle of Wight', SOTN: 'Southampton', WLON: 'West London', EGHA: 'Egham' };
+// Named storms on those dates, from public Met Office naming. Added by me for orientation; not in SSEN's data.
+const STORM = { '2021-11-26': 'Arwen', '2022-02-18': 'Eunice', '2022-01-29': 'Malik', '2022-01-30': 'Corrie', '2025-01-24': 'Éowyn', '2023-12-27': 'Gerrit', '2023-02-17': 'Otto', '2023-10-19': 'Babet' };
+const N = (v, d = 0) => `<b class="n">${fmt(v, d)}</b>`;
+const pct = (v, d = 0) => `<b class="n">${fmt(v * 100, d)}%</b>`;
+const band = b => b.hi == null ? `${b.lo} mph and over` : b.lo === 0 ? `under ${b.hi} mph` : `${b.lo} to ${b.hi} mph`;
+const longDate = s => new Date(s + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+function render(R) {
+  const name = k => DISTRICT[k.split('/').slice(1).join('/')] || k, area = k => k.startsWith('SHEPD') ? 'North' : 'South';
+  const top = R.bins.at(-1), ds = [...R.byDistrict].filter(d => d.ratio != null).sort((a, b) => b.ratio - a.ratio);
+  const most = ds[0], second = ds[1], least = ds.at(-1);
+  const islands = ds.filter(d => /SHET|WISLES|ORKN/.test(d.key));
+  const xb = Math.ceil(Math.max(...R.bins.map(b => b.ratio))), xd = Math.ceil(Math.max(...ds.map(d => d.hi)));
+  const axis = (max, step) => `<div class="axis">${Array.from({ length: Math.floor(max / step) + 1 }, (_, i) => `<span style="left:${i * step / max * 100}%">${i * step}×</span>`).join('')}</div><div></div>`;
+  const noWind = R.topDays.filter(d => d.districtsOver50 === 0);
+
+  $('#out').innerHTML = `
+  <p class="snapshot">Snapshot: computed ${day(R.computed)} from fault records for ${longDate(R.period[0])} to ${longDate(R.period[1])}. Unlike entry 01 this does not recompute when the page opens, because it needs ten years of weather for 31 places.</p>
+
+  <h2>Short answer</h2>
+  <div class="answer">
+    <p>Yes, steeply, once gusts pass about 50 mph. Days that windy are ${pct(R.share.days, 1)} of the record but carry ${pct(R.share.faults)} of the faults and ${pct(R.share.cml)} of the customer-minutes lost.</p>
+  </div>
+  <p>Below 40 mph, wind makes almost no difference to the fault rate. At 40 to 50 mph faults run at ${N(R.bins[3].ratio, 1)} times the calm-day rate, at 50 to 60 mph ${N(R.bins[4].ratio, 1)} times, and at 70 mph and over ${N(top.ratio, 0)} times.</p>
+  <p>Where it matters most is not where it is windiest. ${esc(name(most.key))} and ${esc(name(second.key))} see faults rise ${N(most.ratio, 0)}-fold and ${N(second.ratio, 0)}-fold on 50 mph days. The island districts, which get such days far more often, see a rise of only ${islands.map(d => N(d.ratio, 1)).join(', ')} times.</p>
+
+  <h2>Fault rate by gust strength</h2>
+  <figure>
+    <div class="hb" style="--one:${100 / xb}%">${axis(xb, 2)}
+      ${R.bins.map(b => `<div class="lab">${band(b)} <small>· ${fmt(b.days)} days</small></div>
+        <div class="trk" data-tip="Gusts ${band(b)}\n${fmt(b.days)} district-days · ${fmt(b.faults)} faults\n${fmt(b.perDay, 2)} faults per district per day\n${fmt(b.ratio, 2)}× the calm-day rate"><i style="width:${b.ratio / xb * 100}%"></i></div>
+        <div class="val">${fmt(b.ratio, b.ratio < 10 ? 1 : 0)}×</div>`).join('')}
+    </div>
+    <figcaption>Faults per district per day, as a multiple of the rate that district sees on calm days (gusts under ${R.thresholds.calmBelow} mph). The thin line marks 1×. “Days” counts each district separately, so one calendar day is up to ${R.districts} district-days.</figcaption>
+  </figure>
+  <div class="scroll"><table><thead><tr><th>Daily maximum gust</th><th class="r">District-days</th><th class="r">Faults</th><th class="r">Per district per day</th><th class="r">Recorded cause is wind or falling trees</th><th class="r">Flagged exceptional by SSEN</th></tr></thead><tbody>
+    ${R.bins.map(b => `<tr><td>${band(b)}</td><td class="r">${fmt(b.days)}</td><td class="r">${fmt(b.faults)}</td><td class="r">${fmt(b.perDay, 2)}</td><td class="r">${fmt(b.windShare * 100)}%</td><td class="r">${fmt(b.excShare * 100)}%</td></tr>`).join('')}
+  </tbody></table></div>
+
+  <h2>District by district</h2>
+  <figure>
+    <div class="hb" style="--one:${100 / xd}%">${axis(xd, xd > 10 ? 5 : 2)}
+      ${ds.map(d => `<div class="lab" title="${esc(name(d.key))}">${esc(name(d.key))} <small>· ${fmt(d.windyDays)} days</small></div>
+        <div class="trk" data-tip="${esc(name(d.key))} · ${area(d.key)}\nCalm days: ${fmt(d.calmDays)}, ${fmt(d.calmFaults)} faults\n50 mph+ days: ${fmt(d.windyDays)}, ${fmt(d.windyFaults)} faults\nRatio ${fmt(d.ratio, 1)}× (95% interval ${fmt(d.lo, 1)} to ${fmt(d.hi, 1)})\n1-in-100-day gust: ${fmt(d.p99)} mph"><i class="${d.windyFaults < 50 ? 'dim' : ''}" style="width:${d.ratio / xd * 100}%"></i><u style="left:${d.lo / xd * 100}%;width:${(d.hi - d.lo) / xd * 100}%"></u></div>
+        <div class="val">${fmt(d.ratio, 1)}×</div>`).join('')}
+    </div>
+    <figcaption>Fault rate on days with gusts of ${R.thresholds.windyFrom} mph or more, as a multiple of the same district's calm-day rate. The dark line across each bar is a 95% interval; “days” is how many ${R.thresholds.windyFrom} mph days the district had in ten years. Grey bars rest on fewer than 50 windy-day faults and should be read loosely.</figcaption>
+  </figure>
+  <p>Three patterns stand out.</p>
+  <ul>
+    <li><b>Mainland north-east Scotland is the most exposed.</b> ${esc(name(most.key))} had only ${N(most.windyDays)} such days in ten years, yet they produced ${N(most.windyFaults)} faults.</li>
+    <li><b>The islands cope best.</b> Orkney, the Western Isles and Shetland had between ${N(Math.min(...islands.map(d => d.windyDays)))} and ${N(Math.max(...islands.map(d => d.windyDays)))} such days each, and their fault rate barely doubles. A plausible reason is that networks there are built for routine gales and have few trees nearby, but nothing in this data can confirm that.</li>
+    <li><b>${esc(name(least.key))} shows no effect.</b> Its ratio is ${N(least.ratio, 1)}, with an interval that spans 1. A largely underground urban network would explain it, though again the data does not say.</li>
+  </ul>
+
+  <h2>The worst days</h2>
+  <p>A typical day sees about ${N(R.medianFaultsPerDay)} high-voltage faults across both licence areas. These are the twelve days with the most.</p>
+  <div class="scroll"><table><thead><tr><th>Date</th><th>Named storm</th><th class="r">Faults</th><th class="r">Highest district gust</th><th class="r">Districts at 50 mph+</th><th class="r">Customer-minutes lost</th></tr></thead><tbody>
+    ${R.topDays.map(d => `<tr><td>${longDate(d.date)}</td><td>${STORM[d.date] || ''}</td><td class="r">${fmt(d.faults)}</td><td class="r">${fmt(d.maxGust)} mph</td><td class="r">${d.districtsOver50} of ${R.districts}</td><td class="r">${fmt(d.cml / 1e6, 1)}m</td></tr>`).join('')}
+  </tbody></table></div>
+  <p class="small">Storm names are my addition from public Met Office naming, matched by date. They are not in SSEN's records.</p>
+  ${noWind.length ? `<p><b>${noWind.length} of the twelve were not windy anywhere:</b> ${noWind.map(d => longDate(d.date)).join(', ')}. I have not established what happened on those days. They could be another kind of event, or records entered in bulk under one date.</p>` : ''}
+
+  <h2>Checks</h2>
+  <ul>
+    <li><b>Do the recorded causes agree?</b> Each fault record carries a cause chosen by SSEN's engineers. Wind, windborne material or falling trees account for ${pct(R.bins[0].windShare)} of faults on the calmest days and ${pct(top.windShare)} at 70 mph and over. The weather data and the engineers' own attribution point the same way.</li>
+    <li><b>Is it just winter?</b> Winter is both windier and harder on equipment for other reasons. Using October to March only, the pattern holds: ${N(R.winter.bins[4].ratio, 1)} times at 50 to 60 mph and ${N(R.winter.bins[6].ratio, 0)} times at 70 mph and over.</li>
+  </ul>
+
+  <h2>Method</h2>
+  <ol>
+    <li>Take every high-voltage fault record for both licence areas with an incident date in the ten calendar years 2016 to 2025: ${N(R.faults.used)} of the ${fmt(R.faults.published)} published.</li>
+    <li>Place each of SSEN's ${R.districts} reporting districts at one point, the average position of the primary substations its fault records name.</li>
+    <li>For each point, take the daily maximum wind gust at 10 m from the Open-Meteo historical weather API, which serves the ERA5 reanalysis.</li>
+    <li>Count faults for every district on every day, giving ${N(R.districtDays)} district-days, and group them by that day's gust.</li>
+    <li>Compare each group with what the same districts would have seen at their own calm-day rate. This stops large or fault-prone districts from distorting the result.</li>
+  </ol>
+  <pre>ratio = faults observed in the group / (district-days in the group × that district's calm-day fault rate)</pre>
+
+  <h2>What this cannot tell you</h2>
+  <ul>
+    <li><b>One weather point per district.</b> Highland and Argyll each span well over 100 km, and reanalysis gusts are smoothed over a grid of roughly 10 to 25 km, so local extremes are understated. A fault may have happened in far stronger wind than its district-day records.</li>
+    <li><b>Wind is not the only thing storms bring.</b> Rain, lightning, snow and saturated ground arrive with it. The ratios describe windy days, not wind alone.</li>
+    <li><b>The intervals are too narrow.</b> They assume faults are independent, but one storm causes many faults at once. Treat the district ranking as indicative, especially where windy days are few.</li>
+    <li><b>No measure of exposure.</b> SSEN does not publish overhead line length or tree cover by district here, so a high ratio could reflect more exposed network, not weaker network.</li>
+    <li><b>The records are not only faults.</b> The scheme also logs planned interruptions and operational restrictions. They dilute the effect and are not removed.</li>
+    <li><b>Dates in the source are imperfect.</b> ${N(R.faults.outsidePeriod)} records fall outside 2016 to 2025 and are left out. Some carry dates later than the file itself, which points to date errors in the source that may also affect records inside the period.</li>
+    <li><b>Not a forecast.</b> This shows how past faults lined up with past wind. Turning it into a prediction for a coming storm is a separate step that would need testing against days held back from the analysis.</li>
+    <li><b>District names are inferred.</b> SSEN publishes short codes such as MELK and TAYCEN; the full names here are my reading of them.</li>
+  </ul>
+
+  <h2>Data and reproduction</h2>
+  <p>Fault records: ${R.sources.map(s => `<b>${esc(s.name)}</b>, updated ${day(s.modified)}`).join('; ')}, SSEN Distribution open data. Weather: <a href="https://open-meteo.com">Open-Meteo</a> historical weather API.</p>
+  <p>The result file is <a href="data/02-wind.json">data/02-wind.json</a>. The scripts that produced it are in the <a href="https://github.com/nirdeshacharya/grid-labs/tree/main/analysis">analysis folder</a> of the repository: <span class="n">fetch_wind.py</span> downloads the weather and <span class="n">02-run.html</span> joins it to the fault records in a browser.</p>`;
+}
+getJSON('data/02-wind.json').then(render).catch(e => { $('#out').innerHTML = `<p class="err">The result file could not be loaded: ${esc(e.message)}.</p>`; });
+</script>
+</body>
+</html>

@@ -2,12 +2,12 @@
 
 A public notebook of experiments on the open data published by Scottish and Southern Electricity Networks (SSEN) Distribution. Companion to [Grid Lens](https://nirdeshacharya.github.io/grid-lens/), which shows the data as published.
 
-Each entry asks one question, shows the method, states the result and lists what the result cannot support. Entries marked **Finding** recompute their figures from SSEN's data in the reader's browser each time the page opens.
+Each entry asks one question, shows the method, states the result and lists what the result cannot support. Entry 01 recomputes its figures from SSEN's data in the reader's browser each time the page opens. Entry 02 is a dated snapshot; the scripts that produced it are in `analysis/`.
 
 | Entry | Question | Status |
 |---|---|---|
 | 01 | Is more generation contracted than the grid supply points can carry? | Finding |
-| 02 | Do faults rise with wind, and where do they rise most? | Planned |
+| 02 | Do faults rise with wind, and where do they rise most? | Finding (snapshot) |
 | 03 | Does SSEN buy flexibility where it marks the network as constrained? | Planned |
 | 04 | Which primaries will run out of headroom before their reinforcement arrives? | Planned |
 
