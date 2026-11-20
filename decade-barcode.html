@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A decade of disruption · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .toggle { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0 8px; }
+  .toggle .seg button { font-size: 14px; padding: 7px 14px; }
+  .caption { min-height: 3.4em; font-size: 16px; margin: 6px 0 10px; max-width: 66ch; }
+  .barcode { position: relative; margin: 6px 0 4px; }
+  .barcode canvas { display: block; width: 100%; cursor: crosshair; touch-action: pan-y; }
+  .legend { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink-3); margin: 8px 0 0; flex-wrap: wrap; }
+  .legend .ramp { width: 160px; height: 10px; border-radius: 1px; }
+  .readout { font-size: 14px; color: var(--ink-2); min-height: 3em; margin: 10px 0 0; max-width: 66ch; }
+  .readout b { color: var(--ink); font-weight: 600; }
+  .worst { list-style: none; padding: 0; margin: 0; max-width: none; }
+  .worst li { max-width: none; margin: 0; }
+  .worst button { all: unset; box-sizing: border-box; display: grid; grid-template-columns: 1.6em 1fr auto; gap: 10px; width: 100%; padding: 8px 4px; border-bottom: 1px solid var(--rule); cursor: pointer; font-size: 15px; }
+  .worst button:hover, .worst button[aria-pressed="true"] { background: var(--fill); }
+  .worst button:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
+  .worst .rk { font: 13px var(--mono); color: var(--ink-3); padding-top: 2px; }
+  .worst .v { font: 13px var(--mono); color: var(--ink-2); text-align: right; padding-top: 2px; }
+  .worst small { display: block; color: var(--ink-3); font-size: 13px; }
+</style>
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a> · <a href="https://nirdeshacharya.github.io/grid-lens/">Grid Lens</a></nav></div></header>
+<main>
+  <div class="entry">Visual · from entry 02 <span class="small">· posted 20 November 2026</span></div>
+  <h1>How much of a decade's disruption happened on a handful of days?</h1>
+  <p class="lede">Every day from 2016 to 2025 is one thin stripe, one row per year. The stronger its colour, the more customer-minutes of supply were lost to high-voltage faults that began that day, across both of SSEN's licence areas.</p>
+
+  <div class="toggle"><span class="small">Arrange the days</span>
+    <div class="seg" id="mode"><button aria-pressed="true" data-m="date">In date order</button><button aria-pressed="false" data-m="rank">Worst day first</button></div></div>
+  <p class="caption" id="caption" aria-live="polite"></p>
+  <figure class="barcode"><canvas id="bc" role="img" aria-label="Ten rows of daily stripes, one per year from 2016 to 2025, shaded by customer-minutes lost"></canvas>
+    <div class="legend"><span>no customer-minutes lost</span><span class="ramp" id="ramp"></span><span>more</span><span id="rampnote"></span></div>
+  </figure>
+  <p class="readout" id="readout">Hover or tap a stripe to see that day.</p>
+
+  <h2>The five worst days</h2>
+  <ul class="worst" id="worst"></ul>
+  <p class="small" style="margin-top:10px">Storm names are my addition from public Met Office naming, matched by date. They are not in SSEN's records.</p>
+
+  <h2>What it shows</h2>
+  <p id="shows"></p>
+  <p><a href="02-wind-and-faults.html">Entry 02</a> tests how much of this is wind. On the worst days, SSEN's engineers recorded wind or falling trees as the cause of nearly every fault.</p>
+
+  <h2>What this cannot tell you</h2>
+  <ul>
+    <li>A fault's customer-minutes are counted on the day it began, so a long storm outage lands on one stripe even if repairs ran on for days.</li>
+    <li>Only high-voltage faults are included. Low-voltage faults are more numerous but usually affect fewer customers each.</li>
+    <li>Planned work is left out, as in entry 02. Some records carry dates outside 2016 to 2025 and are not shown.</li>
+  </ul>
+
+  <h2>Data</h2>
+  <p class="small" id="data"></p>
+  <footer>Part of <a href="./">Grid Labs</a>. Not affiliated with SSEN.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+// Named storms on those dates, from public Met Office naming. Added by me for orientation; not in SSEN's data.
+const STORM = { '2021-11-26': 'Storm Arwen', '2022-02-18': 'Storm Eunice', '2022-01-29': 'Storm Malik', '2022-01-30': 'Storm Corrie', '2025-01-24': 'Storm Éowyn', '2023-12-27': 'Storm Gerrit', '2023-02-17': 'Storm Otto', '2023-10-19': 'Storm Babet' };
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches, darkMQ = matchMedia('(prefers-color-scheme: dark)');
+const COLS = 366, LABEL = 40, ROWH = 30, GAP = 6;
+const longDate = s => new Date(s + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+const millions = v => v >= 1e6 ? fmt(v / 1e6, v >= 1e7 ? 0 : 1) + 'm' : fmt(v / 1e3, 0) + 'k';
+
+let D, days, rankOf, years, mode = 'date', pos = [], picked = null, total, lo, hi, cvs, ctx, W, H, dpr;
+
+// three-stop sequential ramp, pale to dark in light mode and dark to pale in dark mode
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const ramp = () => darkMQ.matches ? ['#1f2a28', '#3987e5', '#e3eefc'].map(hex) : ['#e2e8e5', '#2a78d6', '#0b2f5e'].map(hex);
+function colour(t, R) {
+  const [a, b] = t < .5 ? [R[0], R[1]] : [R[1], R[2]], u = t < .5 ? t * 2 : (t - .5) * 2;
+  return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * u)).join(',')})`;
+}
+const shade = v => Math.sqrt(Math.max(0, v) / hi);   // square-root scale: the worst day is darkest, ordinary days stay pale
+
+function layout(m) {
+  const sw = (W - LABEL) / COLS;
+  return days.map((d, i) => {
+    const slot = m === 'date' ? [d.row, d.col] : [Math.floor(rankOf[i] / COLS), rankOf[i] % COLS];
+    return [LABEL + slot[1] * sw, slot[0] * (ROWH + GAP)];
+  });
+}
+function size() {
+  dpr = devicePixelRatio || 1; W = Math.max(300, cvs.parentElement.clientWidth); H = years.length * (ROWH + GAP) - GAP;
+  cvs.width = Math.round(W * dpr); cvs.height = Math.round(H * dpr); cvs.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function paint() {
+  const R = ramp(), sw = (W - LABEL) / COLS, css = getComputedStyle(document.documentElement);
+  ctx.clearRect(0, 0, W, H);
+  ctx.font = '11px "IBM Plex Mono", monospace'; ctx.fillStyle = css.getPropertyValue('--ink-3'); ctx.textBaseline = 'middle';
+  years.forEach((y, r) => ctx.fillText(mode === 'date' ? y : r === 0 ? 'worst' : '', 0, r * (ROWH + GAP) + ROWH / 2));
+  for (let i = 0; i < days.length; i++) { ctx.fillStyle = days[i].fill || (days[i].fill = colour(shade(days[i].cml), R)); ctx.fillRect(pos[i][0], pos[i][1], Math.max(sw, 1 / dpr) + .35, ROWH); }
+  if (mode === 'rank' && !moving) {   // mark how few days make up half the total
+    const x = LABEL + half * sw;
+    ctx.strokeStyle = css.getPropertyValue('--signal'); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, -2); ctx.lineTo(x, ROWH + 2); ctx.stroke();
+  }
+  if (picked != null) { const [x, y] = pos[picked]; ctx.strokeStyle = css.getPropertyValue('--signal'); ctx.lineWidth = 2; ctx.strokeRect(x - 2, y - 3, Math.max(sw, 1) + 4, ROWH + 6); }
+}
+let moving = false;
+function move(to) {
+  const from = pos, target = layout(to);
+  if (reduce) { pos = target; paint(); return; }
+  moving = true; const t0 = performance.now(), dur = 1100;
+  const step = now => {
+    const t = Math.min(1, (now - t0) / dur), e = t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    pos = target.map((p, i) => [from[i][0] + (p[0] - from[i][0]) * e, from[i][1] + (p[1] - from[i][1]) * e]);
+    if (t >= 1) moving = false;
+    paint(); if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+const share = v => fmt(v / total * 100, 1) + '%';
+function describe(i) {
+  const d = days[i]; if (!d) return;
+  $('#readout').innerHTML = `<b>${longDate(d.date)}</b>${STORM[d.date] ? ` · ${STORM[d.date]}` : ''}. ${fmt(d.faults)} high-voltage faults, ${millions(d.cml)} customer-minutes lost, ${share(d.cml)} of the decade's total. Ranked ${fmt(rankOf[i] + 1)} of ${fmt(days.length)} days. Strongest gust at any district point: ${fmt(d.gust)} mph${d.faults ? `; ${fmt(d.wind / d.faults * 100)}% of faults recorded as wind or falling trees` : ''}.`;
+}
+function caption() {
+  $('#caption').textContent = mode === 'date'
+    ? `In date order the decade is mostly faint, broken by a few strong stripes. Most fall between October and March, and the strongest is ${STORM[days[worstIdx[0]].date] || longDate(days[worstIdx[0]].date)}.`
+    : `Ranked, the strong stripes bunch at the start of the top row. The yellow line marks day ${half}: the ${half} worst days, under 2% of the decade, hold half of all customer-minutes lost.`;
+}
+function hitTest(e) {
+  const r = cvs.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, sw = (W - LABEL) / COLS;
+  const row = Math.floor(y / (ROWH + GAP)), col = Math.floor((x - LABEL) / sw);
+  if (x < LABEL || col < 0 || col >= COLS || y - row * (ROWH + GAP) > ROWH) return null;
+  if (mode === 'rank') { const k = row * COLS + col; return byRank[k] ?? null; }
+  return cellIndex.get(row * COLS + col) ?? null;
+}
+
+let worstIdx, half, byRank, cellIndex;
+function setup() {
+  const start = new Date(D.start + 'T12:00:00');
+  days = D.cml.map((cml, i) => { const dt = new Date(start); dt.setDate(dt.getDate() + i); const date = dt.toISOString().slice(0, 10);
+    const y0 = new Date(dt.getFullYear() + '-01-01T12:00:00'); return { date, year: dt.getFullYear(), col: Math.round((dt - y0) / 864e5), cml, faults: D.faults[i], wind: D.windFaults[i], gust: D.gust[i] }; });
+  years = [...new Set(days.map(d => d.year))];
+  days.forEach(d => d.row = years.indexOf(d.year));
+  const order = days.map((_, i) => i).sort((a, b) => days[b].cml - days[a].cml);
+  rankOf = new Array(days.length); order.forEach((i, r) => rankOf[i] = r); byRank = order; worstIdx = order.slice(0, 5);
+  cellIndex = new Map(days.map((d, i) => [d.row * COLS + d.col, i]));
+  total = D.cml.reduce((a, b) => a + b, 0);
+  let c = 0; half = 0; while (c < total / 2) c += days[order[half++]].cml;
+  const sorted = [...D.cml].sort((a, b) => a - b); hi = sorted.at(-1);
+
+  cvs = $('#bc'); ctx = cvs.getContext('2d');
+  size(); pos = layout(mode); paint(); caption();
+  const R = ramp(); $('#ramp').style.background = `linear-gradient(90deg, ${[0, .25, .5, .75, 1].map(t => colour(t, R)).join(',')})`;
+  $('#rampnote').textContent = `(square-root scale, from none to ${millions(hi)} customer-minutes)`;
+
+  $('#worst').innerHTML = worstIdx.map((i, r) => { const d = days[i]; return `<li><button data-i="${i}" aria-pressed="false"><span class="rk">${r + 1}</span><span>${longDate(d.date)}${STORM[d.date] ? ` · ${STORM[d.date]}` : ''}<small>${fmt(d.faults)} faults · strongest gust ${fmt(d.gust)} mph</small></span><span class="v">${millions(d.cml)} · ${share(d.cml)}</span></button></li>`; }).join('');
+  const top5 = worstIdx.reduce((a, i) => a + days[i].cml, 0);
+  $('#shows').textContent = `Disruption on SSEN's high-voltage network is lumpy. The five worst days hold ${share(top5)} of ten years' customer-minutes lost, and the ${half} worst days hold half. On a typical day the network loses about ${millions(sorted[Math.floor(sorted.length / 2)])} customer-minutes, while its worst day lost ${millions(days[worstIdx[0]].cml)}. So decade-long averages say little about the days that matter, and preparing for a few severe storms covers a large share of the disruption.`;
+  $('#data').innerHTML = `High-voltage fault records from SSEN's NaFIRS datasets (${D.sources.map(s => `${esc(s.name)}, updated ${day(s.modified)}`).join('; ')}), ${D.start.slice(0, 4)} to ${D.end.slice(0, 4)}, totalled by the day each fault began. Gusts from the <a href="https://open-meteo.com">Open-Meteo</a> historical weather API at one point per district. Built ${day(D.computed)} by <span class="n">analysis/v2-run.html</span>; data in <a href="data/v2-days.json">data/v2-days.json</a>.`;
+
+  $('#mode').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || b.dataset.m === mode) return;
+    mode = b.dataset.m; for (const x of document.querySelectorAll('#mode button')) x.setAttribute('aria-pressed', x === b);
+    caption(); move(mode);
+  });
+  cvs.addEventListener('pointermove', e => { const i = hitTest(e); if (i != null) describe(i); });
+  cvs.addEventListener('click', e => { const i = hitTest(e); if (i != null) { picked = i; describe(i); paint(); } });
+  $('#worst').addEventListener('click', e => {
+    const b = e.target.closest('button[data-i]'); if (!b) return;
+    picked = +b.dataset.i; describe(picked); paint();
+    for (const x of document.querySelectorAll('#worst button')) x.setAttribute('aria-pressed', x === b);
+  });
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { size(); pos = layout(mode); paint(); }, 150); });
+  darkMQ.addEventListener('change', () => { days.forEach(d => d.fill = null); const R2 = ramp(); $('#ramp').style.background = `linear-gradient(90deg, ${[0, .25, .5, .75, 1].map(t => colour(t, R2)).join(',')})`; paint(); });
+}
+getJSON('data/v2-days.json').then(d => { D = d; setup(); }).catch(e => { $('#caption').innerHTML = `<span class="err">The data could not be loaded: ${esc(e.message)}.</span>`; });
+</script>
+</body>
+</html>

@@ -68,7 +68,7 @@ function render(R) {
   <div class="scroll"><table><thead><tr><th>Daily maximum gust</th><th class="r">District-days</th><th class="r">Faults</th><th class="r">Per district per day</th><th class="r">Recorded cause is wind or falling trees</th><th class="r">Flagged exceptional by SSEN</th></tr></thead><tbody>
     ${R.bins.map(b => `<tr><td>${band(b)}</td><td class="r">${fmt(b.days)}</td><td class="r">${fmt(b.faults)}</td><td class="r">${fmt(b.perDay, 2)}</td><td class="r">${fmt(b.windShare * 100)}%</td><td class="r">${fmt(b.excShare * 100)}%</td></tr>`).join('')}
   </tbody></table></div>
-  <p>The curve does not depend on the biggest storms. Leaving out the three worst windy days, ${stormNames.join(', ')}, the rate at 70 mph and over is still ${N(nsTop.ratio, 1)} times calm. What does depend on them is the share of disruption: customer-minutes lost on 50 mph days fall from ${pct(R.share.cml)} to ${pct(ns.share.cml)} of the total. The five worst days of the decade account for ${pct(R.cmlTop5)} of all customer-minutes lost.</p>
+  <p>The curve does not depend on the biggest storms. Leaving out the three worst windy days, ${stormNames.join(', ')}, the rate at 70 mph and over is still ${N(nsTop.ratio, 1)} times calm. What does depend on them is the share of disruption: customer-minutes lost on 50 mph days fall from ${pct(R.share.cml)} to ${pct(ns.share.cml)} of the total. The five worst days of the decade account for ${pct(R.cmlTop5)} of all customer-minutes lost. <a href="decade-barcode.html">See every day of the decade</a>.</p>
 
   <h2>District by district</h2>
   <figure>

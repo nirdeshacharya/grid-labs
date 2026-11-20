@@ -1,0 +1,35 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Daily disruption data build</title>
+<!-- Builds data/v2-days.json for the "decade as a barcode" visual. Steps:
+     1. python3 analysis/fetch_wind.py        (writes analysis/cache/wind.json)
+     2. python3 -m http.server 5179           (from the repository root)
+     3. open http://localhost:5179/analysis/v2-run.html and save the JSON shown into data/v2-days.json
+     Uses the same fault records and exclusions as entry 02, totalled across both licence areas for each day. -->
+<body style="font:13px ui-monospace,Menlo,monospace;white-space:pre-wrap;padding:16px">running…
+<script src="../lab.js"></script>
+<script>
+const HV = { SHEPD: '245d5825-7d83-4d17-a2c5-04b473b9b408', SEPD: 'f0d9d3fe-6739-4700-a699-f227b4e1de41' };
+const FIELDS = ['DISTRICT_SHORT_CODE', 'HV_INCIDENT_TIME', 'CAUSE_CODE', 'HV_CUST_MINS_LOST'];
+const WIND_CAUSES = new Set(['6', '21', '23', '24']);   // wind and gale, windborne materials, falling live and dead trees
+const PLANNED_CAUSES = new Set(['75', '86']);            // same exclusion as entry 02
+
+async function run() {
+  const wind = await getJSON('cache/wind.json');
+  const dayIx = new Map(wind.days.map((d, i) => [d, i])), n = wind.days.length, keys = Object.keys(wind.gust);
+  const [a, b, ma, mb] = await Promise.all([fetchAll(HV.SHEPD, FIELDS), fetchAll(HV.SEPD, FIELDS),
+    getJSON(CKAN + 'resource_show?id=' + HV.SHEPD), getJSON(CKAN + 'resource_show?id=' + HV.SEPD)]);
+  const faults = new Array(n).fill(0), windFaults = new Array(n).fill(0), cml = new Array(n).fill(0);
+  for (const [area, rows] of [['SHEPD', a], ['SEPD', b]]) for (const r of rows) {
+    const i = dayIx.get(String(r.HV_INCIDENT_TIME).slice(0, 10));
+    if (i == null || !wind.gust[area + '/' + r.DISTRICT_SHORT_CODE] || PLANNED_CAUSES.has(String(r.CAUSE_CODE))) continue;
+    faults[i]++; cml[i] += +r.HV_CUST_MINS_LOST || 0; if (WIND_CAUSES.has(String(r.CAUSE_CODE))) windFaults[i]++;
+  }
+  // strongest gust recorded at any district point that day
+  const gust = wind.days.map((_, i) => Math.round(Math.max(...keys.map(k => wind.gust[k][i] ?? 0))));
+  return { computed: new Date().toISOString(), start: wind.days[0], end: wind.days.at(-1),
+    sources: [{ name: ma.result.name + ' (SHEPD)', modified: ma.result.last_modified }, { name: mb.result.name + ' (SEPD)', modified: mb.result.last_modified }],
+    cml: cml.map(Math.round), faults, windFaults, gust };
+}
+run().then(r => { window._result = r; document.body.textContent = JSON.stringify(r).slice(0, 2000) + '…'; }).catch(e => { window._error = String(e); document.body.textContent = 'failed: ' + e; });
+</script>
