@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your postcode's grid story · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .ask { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 22px 0 6px; }
+  .ask input { font: 500 18px var(--mono); text-transform: uppercase; color: var(--ink); background: var(--panel); border: 1px solid var(--ink-3); border-radius: 2px; padding: 8px 12px; width: 12ch; min-width: 0; }
+  .ask input::placeholder { text-transform: none; font-family: var(--sans); font-weight: 400; color: var(--ink-3); }
+  .ask button { font: 600 15px var(--sans); color: var(--panel); background: var(--ink); border: 0; border-radius: 2px; padding: 10px 18px; cursor: pointer; }
+  .ask button:focus-visible, .ask input:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  .examples { font-size: 13px; color: var(--ink-3); }
+  .examples button { font: inherit; color: var(--ink-2); background: none; border: 0; padding: 0; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+  .story { margin-top: 26px; }
+  .story h2 { margin-top: 34px; }
+  .story p { font-size: 17px; }
+  .place { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 20px; align-items: start; }
+  .place svg { width: 100%; height: auto; display: block; }
+  .place svg path { fill: var(--fill); stroke: var(--ink-3); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .place svg circle { fill: var(--signal); stroke: var(--ink); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .place figcaption { margin-top: 4px; }
+  @media (max-width: 560px) { .place { grid-template-columns: 1fr; } .place figure { max-width: 220px; } }
+  .spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 34px; vertical-align: -6px; margin: 0 6px; }
+  .spark i { display: block; width: 7px; background: var(--s1); border-radius: 1px 1px 0 0; min-height: 1px; }
+  .pill { font: 500 13px var(--sans); white-space: nowrap; }
+  .pill i { font-style: normal; margin-right: 3px; }
+  .muted { color: var(--ink-3); }
+  .loading { min-height: 3em; }
+</style>
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a> · <a href="https://nirdeshacharya.github.io/grid-lens/">Grid Lens</a></nav></div></header>
+<main>
+  <div class="entry">Visual · draws on entries 01, 02 and 04 <span class="small">· posted 20 November 2026</span></div>
+  <h1>Your postcode's grid story</h1>
+  <p class="lede">Type a postcode in SSEN's area, central southern England or the north of Scotland, to read about the electricity network that serves it: how much room it has, how often it fails, how storms hit it, and what is coming.</p>
+  <form class="ask" id="ask"><label class="small" for="pc">Postcode</label><input id="pc" name="pc" autocomplete="postal-code" placeholder="e.g. RG1 3BE" required><button>Tell the story</button></form>
+  <p class="examples" id="examples">Or try <button data-pc="RG1 3BE">Reading</button>, <button data-pc="IV2 3PA">Inverness</button>, <button data-pc="KW15 1JY">Kirkwall</button>, <button data-pc="PH8 0AA">Dunkeld</button> or <button data-pc="SP1 1BL">Salisbury</button>.</p>
+  <div class="story" id="story" aria-live="polite"><p class="loading">Loading SSEN's network data…</p></div>
+
+  <h2>Where this comes from</h2>
+  <p class="small" id="sources">Your postcode is sent to postcodes.io to find where it is, and nothing is stored. The substation that serves it comes from SSEN's primary supply-area boundaries, simplified to about 100 m, so a postcode right on a boundary can land in the neighbouring area. Headroom, generation and live outages are fetched from SSEN as the page loads. The fault record, storm sensitivity, low-carbon counts and the look ahead come from <a href="02-wind-and-faults.html">entry 02</a>, <a href="04-headroom-runout.html">entry 04</a> and SSEN's datasets as built on the date below.</p>
+  <footer>Part of <a href="./">Grid Labs</a>. Not affiliated with SSEN. This is a summary of published data, not advice on connecting anything to the network.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+const DISTRICT = { 'N/EAST': 'North East Scotland', HIGH: 'Highland', TAYCEN: 'Tayside and Central', ARGYLL: 'Argyll and West Highland', SHET: 'Shetland', WISLES: 'Western Isles', ORKN: 'Orkney',
+  POOL: 'Poole', MELK: 'Melksham', OXFN: 'Oxford North', SWIN: 'Swindon', OXFS: 'Oxford South', NEWF: 'New Forest', PETE: 'Petersfield', BASI: 'Basingstoke', REAN: 'Reading North', ALDE: 'Aldershot',
+  REAS: 'Reading South', CHIC: 'Chichester', SALI: 'Salisbury', SLOU: 'Slough', YEOV: 'Yeovil', NEWB: 'Newbury', BOUR: 'Bournemouth', BRAC: 'Bracknell', ANDO: 'Andover', PORT: 'Portsmouth',
+  ISLE: 'Isle of Wight', SOTN: 'Southampton', WLON: 'West London', EGHA: 'Egham' };
+const RAG = { Red: ['--crit', '■', 'red'], Amber: ['--warn', '▲', 'amber'], Green: ['--good', '●', 'green'] };
+const pill = s => RAG[s] ? `<span class="pill"><i style="color:var(${RAG[s][0]})">${RAG[s][1]}</i>${RAG[s][2]}</span>` : 'no status';
+const N = (v, d = 0) => `<b class="n">${fmt(v, d)}</b>`;
+const titleCase = s => String(s || '').toLowerCase().replace(/(^|[\s(-])([a-z])/g, (m, a, b) => a + b.toUpperCase()).replace(/\bOf\b/g, 'of').replace(/\bAnd\b/g, 'and');
+const plain = s => String(s || '').replace(/ (GSP|BSP|Primary)$/, '');
+const units = t => { const o = []; for (const m of String(t || '').matchAll(/(\d+)\s*x\s*([\d.]+)\s*MVA/gi)) for (let i = 0; i < +m[1]; i++) o.push(+m[2]); return o; };
+const Q = 1e4;
+const yr = v => String(v);   // years without a thousands separator
+// SSEN's cause labels mix capitals; lower-case them but keep acronyms such as PESC and the name National Grid
+const lowerFirst = s => s.split(' ').map(w => /^[A-Z]{2,}$/.test(w) ? w : w.toLowerCase()).join(' ').replace(/national grid/g, 'National Grid');
+let A, head, outages, carbon, medianCml;
+
+// ---- geometry ----
+const decode = enc => { const pts = []; let x = 0, y = 0; for (let i = 0; i < enc.length; i += 2) { x += enc[i]; y += enc[i + 1]; pts.push([x / Q, y / Q]); } return pts; };
+const inRing = (x, y, r) => { let c = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [xi, yi] = r[i], [xj, yj] = r[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+function locate(lon, lat) {
+  for (const a of A.areas) {
+    const [x0, y0, x1, y1] = a.bbox; if (lon < x0 || lon > x1 || lat < y0 || lat > y1) continue;
+    a.rings = a.rings || a.p.map(poly => poly.map(decode));
+    if (a.rings.some(poly => inRing(lon, lat, poly[0]) && !poly.slice(1).some(h => inRing(lon, lat, h)))) return { a, exact: true };
+  }
+  // not inside any simplified area: take the nearest boundary point within about 1.5 km
+  let best = null, bd = Infinity; const k = Math.cos(lat * Math.PI / 180);
+  for (const a of A.areas) {
+    const [x0, y0, x1, y1] = a.bbox; if (lon < x0 - .03 || lon > x1 + .03 || lat < y0 - .02 || lat > y1 + .02) continue;
+    a.rings = a.rings || a.p.map(poly => poly.map(decode));
+    for (const poly of a.rings) for (const [x, y] of poly[0]) { const d = Math.hypot((x - lon) * k, y - lat); if (d < bd) { bd = d; best = a; } }
+  }
+  return best && bd * 111 < 1.5 ? { a: best, exact: false } : null;
+}
+function outline(a, lon, lat) {
+  const rings = a.rings.map(p => p[0]); let [x0, y0, x1, y1] = a.bbox; x0 = Math.min(x0, lon); x1 = Math.max(x1, lon); y0 = Math.min(y0, lat); y1 = Math.max(y1, lat);
+  const k = Math.cos((y0 + y1) / 2 * Math.PI / 180), w = (x1 - x0) * k || .01, h = (y1 - y0) || .01, s = 180 / Math.max(w, h), W = w * s + 20, H = h * s + 20;
+  const pt = (x, y) => `${((x - x0) * k * s + 10).toFixed(1)},${((y1 - y) * s + 10).toFixed(1)}`;
+  return `<svg viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" role="img" aria-label="Outline of the area this substation serves, with the postcode marked">${a.rings.map(p => `<path d="${p.map(r => 'M' + r.map(([x, y]) => pt(x, y)).join('L') + 'Z').join('')}" fill-rule="evenodd"/>`).join('')}<circle cx="${pt(lon, lat).split(',')[0]}" cy="${pt(lon, lat).split(',')[1]}" r="5"/></svg>`;
+}
+
+// ---- matching an area to SSEN's live headroom rows ----
+const stripName = s => norm(s).replace(/(TOWN|11KV|11|33|PS|GRID|B11|BB|END|MIDDLE)+$/, '');
+function headroomFor(a) {
+  const rows = head.filter(r => r['Substation Type'] === 'Primary' && /SEPD/.test(r.map___license_area) === (a.a === 'SEPD'));
+  const k = norm(a.n), ks = stripName(a.n);
+  return rows.find(r => norm(r.Substation) === k) || rows.find(r => stripName(r.Substation) === ks) || rows.find(r => { const x = norm(r.Substation); return x.length > 4 && (x.startsWith(ks) || ks.startsWith(x)); }) || null;
+}
+
+async function tell(pcRaw) {
+  const story = $('#story'), pc = pcRaw.trim().toUpperCase().replace(/\s+/g, ' ');
+  story.innerHTML = `<p class="loading">Looking up ${esc(pc)}…</p>`;
+  let r = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(pc.replace(/\s/g, ''))}`).then(x => x.json()).catch(() => null), approx = false;
+  if (!r || r.status !== 200) { r = await fetch(`https://api.postcodes.io/outcodes/${encodeURIComponent(pc.replace(/\s/g, ''))}`).then(x => x.json()).catch(() => null); approx = true; }
+  if (!r || r.status !== 200 || r.result.latitude == null) { story.innerHTML = `<p class="err">postcodes.io does not recognise “${esc(pc)}”. Check it and try again.</p>`; return; }
+  const { latitude: lat, longitude: lon } = r.result, town = [].concat(r.result.admin_district || [])[0] || [].concat(r.result.parish || [])[0] || '';
+  const hit = locate(lon, lat);
+  try { history.replaceState(null, '', `?pc=${encodeURIComponent(pc)}`); } catch { /* address bar update is optional */ }
+  if (!hit) { story.innerHTML = `<p>${esc(pc)}${town ? `, in ${esc(town)},` : ''} does not fall inside any of SSEN's supply areas. It is probably served by another distribution network operator.</p>`; return; }
+  const a = hit.a, hr = headroomFor(a), area = a.a === 'SEPD' ? 'central southern England' : 'the north of Scotland';
+  const sub = hr ? plain(hr.Substation) : titleCase(a.n), parts = [];
+
+  // 1. where
+  parts.push(`<div class="place"><div>
+    <p>${esc(pc)}${approx ? ' (the middle of that postcode district)' : ''} is in ${esc(town || area)}, in SSEN's ${a.a === 'SEPD' ? 'southern' : 'northern'} licence area. ${hit.exact ? 'It is supplied from' : 'It sits on the edge of the area supplied from'} <b>${esc(sub)}</b> primary substation${a.lct ? `, which serves about ${N(a.lct.customers)} customers` : ''}.${hr ? ` That substation is fed from ${esc(plain(hr['Upstream BSP']) !== 'N/A' && hr['Upstream BSP'] && hr['Upstream BSP'] !== 'N/A' ? plain(hr['Upstream BSP']) + ' bulk supply point and ' : '')}${esc(plain(hr['Upstream GSP']))} grid supply point, where SSEN's network meets the national transmission system.` : ''}</p>
+    </div><figure>${outline(a, lon, lat)}<figcaption class="small">The area ${esc(sub)} serves, as SSEN models it. The dot is ${esc(pc)}.</figcaption></figure></div>`);
+
+  // 2. room on the network (live)
+  if (hr) {
+    const dh = num(hr.estimated_demand_headroom__mva_), gh = num(hr.estimated_generation_headroom__mw_), works = hr['Substation Reinforcement Works'] || hr['Upstream Reinforcement Works'], due = hr['Substation Reinforcement Completion Date'] || hr['Upstream Reinforcement Completion Date'];
+    parts.push(`<h2>Room on the network</h2><p>${dh > 0 ? `SSEN estimates ${esc(sub)} could take about ${N(dh, 1)} MVA more demand` : `SSEN shows no spare capacity at ${esc(sub)} for new demand`}, status ${pill(hr['Substation Demand RAG Status'])}${hr['Demand Constraint'] ? `, limited by ${esc(hr['Demand Constraint'].toLowerCase())}` : ''}. For new generation such as solar panels or a wind turbine, ${gh > 0 ? `there is about ${N(gh, 1)} MW` : 'there is none'}, status ${pill(hr['Substation Generation RAG Status'])}.${works ? ` Reinforcement is planned${due ? `, due ${esc(due)}` : ''}: ${esc(String(works).replace(/\s+/g, ' ').replace(/^Transmission works:\s*/i, 'transmission works, '))}${/[.]$/.test(works) ? '' : '.'}` : ' No reinforcement is listed.'}</p>`);
+    // the grid supply point above, as in entry 01
+    const g = head.find(x => x['Substation Type'] === 'GSP' && x.Substation === hr['Upstream GSP']);
+    if (g) {
+      const tx = units(g['Transformer Nameplate Ratings']), total = tx.reduce((s, v) => s + v, 0), conn = num(g.connected_generation__mw_), contr = num(g.contracted_generation__mw_);
+      if (total && conn != null && contr != null) {
+        const ratio = (conn + contr) / total;
+        parts.push(`<p>Further up, ${esc(plain(g.Substation))} grid supply point has ${N(conn)} MW of generation connected and ${N(contr)} MW more contracted, against ${N(total)} MVA of transformers. That is ${N(ratio, 1)} times its rating${ratio > 1 ? ', which makes it one of the oversubscribed sites in <a href="01-contracted-generation.html">entry 01</a>' : ''}.</p>`);
+      }
+    }
+  } else parts.push(`<h2>Room on the network</h2><p class="muted">SSEN's headroom file has no entry that matches ${esc(titleCase(a.n))}, so its spare capacity is not shown.</p>`);
+
+  // 3. fault record
+  if (a.f && a.lct?.customers) {
+    const n = a.f.years.reduce((s, v) => s + v, 0), per = a.f.cml / a.lct.customers / a.f.years.length, max = Math.max(...a.f.years, 1);
+    const spark = `<span class="spark" role="img" aria-label="Faults per year, ${A.years[0]} to ${A.years[1]}" title="Faults per year, ${A.years[0]} to ${A.years[1]}">${a.f.years.map((v, i) => `<i title="${A.years[0] + i}: ${v}" style="height:${v / max * 100}%"></i>`).join('')}</span>`;
+    const cmp = per > medianCml * 1.5 ? 'well above' : per > medianCml * 1.1 ? 'above' : per < medianCml / 1.5 ? 'well below' : per < medianCml / 1.1 ? 'below' : 'close to';
+    parts.push(`<h2>How often it fails</h2><p>Between ${A.years[0]} and ${A.years[1]}, SSEN recorded ${N(n)} high-voltage faults on the network fed from ${esc(sub)}${spark}. Spread across its customers, they cost about ${N(per)} minutes of supply per customer per year, ${cmp} the middle of SSEN's primaries, ${N(medianCml)} minutes. The biggest single cause was “${esc(lowerFirst(String(a.f.top)))}”, with ${N(a.f.topShare)}% of the minutes lost.</p>`);
+  } else parts.push(`<h2>How often it fails</h2><p class="muted">No fault records could be matched to this substation.</p>`);
+
+  // 4. storms, from entry 02
+  const d = a.dist && A.districts[a.dist], dn = a.dist && DISTRICT[a.dist.split('/').slice(1).join('/')];
+  if (d) parts.push(`<h2>When storms come</h2><p>${esc(sub)} is in SSEN's ${esc(dn)} fault district. There, days with gusts of 50 mph or more bring about ${N(d.ratio, 1)} times the usual number of faults, from ${N(d.windyDays)} such days in ten years.${d.windyDays < 70 && d.without3 ? ` That rests on few windy days, and without its three worst it is about ${N(d.without3, 1)} times, so treat it as rough.` : ''}${d.windyDays > 250 ? ` Wind that strong is routine there, so the better measure is the district's own windiest days, which bring about ${N(d.own, 1)} times the usual faults.` : ''} <a href="02-wind-and-faults.html">Entry 02</a> has the full comparison.</p>`);
+
+  // 5. low-carbon technology now
+  if (a.lct) parts.push(`<h2>What people have connected</h2><p>Among its ${N(a.lct.customers)} customers, SSEN counts ${N(a.lct.ev)} electric vehicle chargers, ${N(a.lct.hp)} heat pumps, ${N(a.lct.pv)} solar installations${a.lct.battery ? ` and ${N(a.lct.battery)} home batteries, some fitted alongside the solar` : ''}. That is about ${N(a.lct.ev / a.lct.customers * 100, 1)} chargers and ${N(a.lct.hp / a.lct.customers * 100, 1)} heat pumps per 100 customers.</p>`);
+
+  // 6. looking ahead, from entry 04
+  const ro = a.r04;
+  if (ro) parts.push(`<h2>Looking ahead</h2><p>${ro.h > 0
+    ? (ro.def ? `If heat pumps, electric cars and new homes grow as in SSEN's Holistic Transition scenario, the spare demand capacity at ${esc(sub)} would be used up around <b class="n">${yr(ro.def)}</b>${ro.managed !== ro.unmanaged ? `: ${ro.managed ? `<b class="n">${yr(ro.managed)}</b>` : 'after 2040'} if cars charge at quiet times, ${ro.unmanaged ? `<b class="n">${yr(ro.unmanaged)}</b>` : 'after 2040'} if they all charge at the evening peak` : ''}.` : `On SSEN's Holistic Transition projections, ${esc(sub)} would still have spare demand capacity in 2040${ro.unmanaged ? `, unless cars all charge at the evening peak, in which case it would run out around <b class="n">${yr(ro.unmanaged)}</b>` : ''}.`)
+    : `${esc(sub)} has no spare demand capacity today, so new heat pumps, chargers and homes here depend on reinforcement, flexibility contracts or curtailable connections.`} ${ro.h > 0 ? '<a href="04-headroom-runout.html">Entry 04</a> explains the assumptions, which matter a great deal.' : '<a href="04-headroom-runout.html">Entry 04</a> looks at why so many substations are in this position.'}</p>`);
+
+  // 7. right now (live)
+  const out = r.result.outcode || pc.split(' ')[0], live = outages.filter(o => String(o.postcode || '').replace(/\s+/g, '').startsWith(out.replace(/\s+/g, '')) && !o.date_time_of_restoration && !/completed/i.test(o.status || ''));
+  const reg = carbon?.find(x => x.regionid === (a.a === 'SEPD' ? 12 : 1));
+  parts.push(`<h2>Right now</h2><p>${live.length ? `SSEN is reporting ${N(live.length)} unrestored ${live.length === 1 ? 'outage' : 'outages'} in the ${esc(out)} postcode district.` : `SSEN is reporting no unrestored outages in the ${esc(out)} postcode district.`}${reg ? ` Electricity in ${esc(reg.shortname)} is running at about ${N(reg.intensity.forecast)} grams of CO₂ per kWh, which the national system operator rates ${esc(reg.intensity.index)}.` : ''}</p>`);
+
+  story.innerHTML = parts.join('');
+}
+
+async function start() {
+  const hf = await latestResource('generation-availability-and-network-capacity', /headroom dashboard data/i);
+  [A, head, outages, carbon] = await Promise.all([
+    getJSON('data/v3-areas.json'), fetchAll(hf.id),
+    fetchAll('d0ddd2de-30eb-49fc-a93e-f0044d507aac').catch(() => []),
+    getJSON('https://api.carbonintensity.org.uk/regional').then(j => j.data[0].regions).catch(() => null)]);
+  const per = A.areas.filter(a => a.f && a.lct?.customers >= 200).map(a => a.f.cml / a.lct.customers / a.f.years.length).sort((x, y) => x - y);
+  medianCml = per[Math.floor(per.length / 2)];
+  $('#sources').insertAdjacentHTML('beforeend', ` Headroom: <b>${esc(hf.name)}</b>, updated ${day(hf.modified)}. Areas and facts built ${day(A.computed)} by <span class="n">analysis/v3-run.html</span>.`);
+  const q = new URLSearchParams(location.search).get('pc') || 'RG1 3BE';
+  $('#pc').value = q; await tell(q);
+}
+$('#ask').addEventListener('submit', e => { e.preventDefault(); if (A) tell($('#pc').value); });
+$('#examples').addEventListener('click', e => { const b = e.target.closest('button[data-pc]'); if (b && A) { $('#pc').value = b.dataset.pc; tell(b.dataset.pc); } });
+start().catch(e => { $('#story').innerHTML = `<p class="err">SSEN's data could not be loaded: ${esc(e.message)}. Reload to try again.</p>`; });
+</script>
+</body>
+</html>

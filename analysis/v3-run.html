@@ -1,0 +1,101 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Postcode story data build</title>
+<!-- Builds data/v3-areas.json for "Your postcode's grid story". Steps:
+     1. python3 -m http.server 5179           (from the repository root; data/02-wind.json and data/04-runout.json must exist)
+     2. open http://localhost:5179/analysis/v3-run.html and save the JSON into data/v3-areas.json
+     It simplifies SSEN's primary supply-area boundaries so a postcode can be placed in the area that serves it,
+     and attaches facts about each primary from the fault records, the low-carbon technology dataset and entries 02 and 04. -->
+<body style="font:13px ui-monospace,Menlo,monospace;white-space:pre-wrap;padding:16px">running…
+<script src="../lab.js"></script>
+<script>
+const HV = { SHEPD: '245d5825-7d83-4d17-a2c5-04b473b9b408', SEPD: 'f0d9d3fe-6739-4700-a699-f227b4e1de41' };
+const LCT = 'd8a481db-5f11-4849-8751-0186b9be5571';
+const PLANNED = new Set(['75', '86']), YEARS = [2016, 2025];
+const TOL = 0.0012;        // simplification tolerance in degrees, roughly 80 to 130 m
+const Q = 1e4;             // coordinates stored to 4 decimal places, about 10 m
+
+// Douglas-Peucker on [lon, lat] pairs, with longitude scaled for latitude
+function simplify(pts, tol) {
+  if (pts.length < 4) return pts;
+  const k = Math.cos(pts[0][1] * Math.PI / 180), keep = new Uint8Array(pts.length); keep[0] = keep[pts.length - 1] = 1;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop(); let best = 0, bi = -1;
+    const ax = pts[a][0] * k, ay = pts[a][1], bx = pts[b][0] * k, by = pts[b][1], dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy);
+    for (let i = a + 1; i < b; i++) {
+      // a closed ring starts and ends on the same point, so measure from that point instead of from a zero-length line
+      const d = len < 1e-9 ? Math.hypot(pts[i][0] * k - ax, pts[i][1] - ay) : Math.abs(dy * (pts[i][0] * k - ax) - dx * (pts[i][1] - ay)) / len;
+      if (d > best) { best = d; bi = i; }
+    }
+    if (best > tol) { keep[bi] = 1; stack.push([a, bi], [bi, b]); }
+  }
+  return pts.filter((_, i) => keep[i]);
+}
+// ring -> delta-encoded integers: [x0, y0, dx1, dy1, ...]
+const encode = ring => { const out = []; let px = 0, py = 0; for (const [x, y] of ring) { const ix = Math.round(x * Q), iy = Math.round(y * Q); out.push(ix - px, iy - py); px = ix; py = iy; } return out; };
+
+async function run() {
+  const res = (await getJSON(CKAN + 'package_show?id=primary-supply-areas')).result.resources.filter(r => /geojson/i.test(r.format));
+  const [wind, runout, lct, n, s, ...geo] = await Promise.all([getJSON('../data/02-wind.json'), getJSON('../data/04-runout.json'), fetchAll(LCT),
+    fetchAll(HV.SHEPD, ['DISTRICT_SHORT_CODE', 'HV_INCIDENT_TIME', 'PRIMARY_NRN', 'CAUSE', 'CAUSE_CODE', 'HV_CUST_MINS_LOST']),
+    fetchAll(HV.SEPD, ['DISTRICT_SHORT_CODE', 'HV_INCIDENT_TIME', 'NRN_SOUTH', 'CAUSE', 'CAUSE_CODE', 'HV_CUST_MINS_LOST']),
+    ...res.map(r => getJSON(r.url))]);
+
+  // faults per primary, 2016 to 2025, planned work removed as in entry 02
+  const F = new Map();
+  const add = (pk, r) => {
+    const y = +String(r.HV_INCIDENT_TIME).slice(0, 4); if (y < YEARS[0] || y > YEARS[1] || PLANNED.has(String(r.CAUSE_CODE))) return;
+    let e = F.get(pk); if (!e) F.set(pk, e = { years: Array(YEARS[1] - YEARS[0] + 1).fill(0), cml: 0, causes: {}, dist: {} });
+    e.years[y - YEARS[0]]++; const c = +r.HV_CUST_MINS_LOST || 0; e.cml += c; e.causes[r.CAUSE || 'Not recorded'] = (e.causes[r.CAUSE || 'Not recorded'] || 0) + c; e.dist[r.DISTRICT_SHORT_CODE] = (e.dist[r.DISTRICT_SHORT_CODE] || 0) + 1;
+  };
+  for (const r of n) if (r.PRIMARY_NRN != null) add('SHEPD:' + r.PRIMARY_NRN, r);
+  for (const r of s) if (r.NRN_SOUTH != null) add('SEPD:' + (r.NRN_SOUTH < 10000 ? r.NRN_SOUTH : Math.floor(r.NRN_SOUTH / 1000)), r);
+
+  // low-carbon technologies and customer numbers by primary number
+  const L = new Map();
+  for (const r of lct) { const e = L.get(r.PRIMARY_NRN) || L.set(r.PRIMARY_NRN, { customers: r.TOTAL_CUSTOMERS }).get(r.PRIMARY_NRN); e[r.LCT] = r.count_LCT; }
+
+  // entry 04: run-out year at the page defaults, and with managed or unmanaged car charging
+  const KW = [1.7, 0.6, 0.6, 1.2], runYear = (p, kw) => { for (let j = 0; j < runout.years.length; j++) if (kw.reduce((a, k, g) => a + k * p.d[0][g][j], 0) / 1000 >= p.h) return runout.years[j]; return null; };
+  const R04 = new Map();
+  for (const p of runout.open) R04.set(p.a + '|' + norm(p.n), { h: p.h, def: runYear(p, KW), managed: runYear(p, [1.7, 0.6, 0.3, 1.2]), unmanaged: runYear(p, [1.7, 0.6, 1.0, 1.2]) });
+  for (const p of runout.zero) R04.set(p.a + '|' + norm(p.n), { h: 0 });
+
+  const districts = Object.fromEntries(wind.byDistrict.map(d => [d.key, { ratio: d.ratio, own: d.own, windyDays: d.windyDays, without3: d.without3 }]));
+
+  const areas = [];
+  let pointsIn = 0, pointsOut = 0;
+  geo.forEach((g, gi) => {
+    const area = /SHEPD/i.test(res[gi].name) ? 'SHEPD' : 'SEPD';
+    for (const f of g.features) {
+      const nrn = parseInt(f.properties.primary_nrn_split, 10); if (!f.geometry || !Number.isFinite(nrn)) continue;
+      const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates, enc = [];
+      let minX = 180, minY = 90, maxX = -180, maxY = -90;
+      for (const poly of polys) {
+        const rings = [];
+        poly.forEach((ring, ri) => {
+          pointsIn += ring.length; const sr = simplify(ring, TOL);
+          if (sr.length < 4) return;   // too small to matter once simplified
+          if (ri === 0) for (const [x, y] of sr) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+          pointsOut += sr.length; rings.push(encode(sr));
+        });
+        if (rings.length) enc.push(rings);
+      }
+      if (!enc.length) continue;
+      const pk = area + ':' + nrn, fe = F.get(pk), name = f.properties.primary_name_2025, l = L.get(nrn);
+      const distCode = fe ? Object.entries(fe.dist).sort((a, b) => b[1] - a[1])[0][0] : null;
+      const top = fe ? Object.entries(fe.causes).sort((a, b) => b[1] - a[1])[0] : null;
+      areas.push({ pk, a: area, n: name, bbox: [minX, minY, maxX, maxY].map(v => Math.round(v * Q) / Q), p: enc,
+        dist: distCode ? area + '/' + distCode : null,
+        f: fe ? { years: fe.years, cml: Math.round(fe.cml), top: top[0], topShare: Math.round(top[1] / fe.cml * 100) || 0 } : null,
+        lct: l ? { customers: l.customers, ev: l.EV || 0, hp: l.HP || 0, pv: (l.PV || 0) + (l['PV/Battery'] || 0), battery: (l.Battery || 0) + (l['PV/Battery'] || 0) } : null,
+        r04: R04.get(area + '|' + norm(name)) || null });
+    }
+  });
+  return { computed: new Date().toISOString(), years: YEARS, tolerance: TOL, sources: { boundaries: res.map(r => ({ name: r.name, modified: r.last_modified })) },
+    pointsIn, pointsOut, districts, areas };
+}
+run().then(r => { window._result = r; const s = JSON.stringify(r); document.body.textContent = `done: ${r.areas.length} areas, ${r.pointsIn} points to ${r.pointsOut}, ${(s.length / 1024).toFixed(0)} KB`; })
+  .catch(e => { window._error = String(e); document.body.textContent = 'failed: ' + e; });
+</script>
