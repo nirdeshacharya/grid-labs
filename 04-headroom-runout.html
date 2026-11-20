@@ -12,31 +12,38 @@
 <body>
 <header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a> · <a href="https://nirdeshacharya.github.io/grid-lens/">Grid Lens</a></nav></div></header>
 <main>
-  <div class="entry">Entry 04 <span class="status finding">Finding</span></div>
-  <h1>Which primaries will run out of headroom before their reinforcement arrives?</h1>
+  <div class="entry">Entry 04 <span class="status finding">Finding</span> <span class="small">· revised 20 November 2026</span></div>
+  <h1>Where could home electrification use up substation headroom before upgrades arrive?</h1>
   <p class="lede">SSEN's spare demand capacity at each primary substation, set against its own projections of heat pumps, electric vehicles and new homes in the area each one serves.</p>
+  <p>Headroom is SSEN's estimate of how much extra demand a substation can take. When it runs out, new connections such as heat pumps or chargers need reinforcement, flexibility contracts or a curtailable connection first. It does not mean power cuts, but it does mean the site has less margin if a transformer fails or is out for maintenance.</p>
   <div id="out"><p class="loading">Loading the data…</p></div>
-  <footer>Part of <a href="./">Grid Labs</a>. Not affiliated with SSEN. This is a what-if calculation on published figures, not a network study, and “running out” here does not mean power cuts.</footer>
+  <footer>Part of <a href="./">Grid Labs</a>. Not affiliated with SSEN. This is a what-if calculation on published figures, not a network study.</footer>
 </main>
 <script src="lab.js"></script>
 <script>
 // Peak demand each new device adds, in kW, after allowing for the fact that not all run at once.
-// These defaults are my assumptions, chosen from the range network planners commonly quote. They are not SSEN's.
-const DEFAULT_KW = [1.7, 0.6, 1.0, 1.2];
+// These defaults are my assumptions. The car default sits midway between managed (0.3 kW) and unmanaged (1.0 kW) charging, the two ends tested in the range table.
+const DEFAULT_KW = [1.7, 0.6, 0.6, 1.2];
+const EV_RANGE = [0.3, 1.0];
 const KW_RANGE = [[0.5, 3], [0, 1.5], [0, 2], [0.5, 2.5]];
 const KW_LABEL = ['Each heat pump', 'Each hybrid heat pump', 'Each electric car or van', 'Each new home'];
 const N = (v, d = 0) => `<b class="n">${fmt(v, d)}</b>`;
 const MONTHS = 'JanFebMarAprMayJunJulAugSepOctNovDec';
 const dueYear = s => { const m = String(s || '').match(/([A-Za-z]{3})-(\d\d)/); return m && MONTHS.includes(m[1]) ? 2000 + +m[2] : null; };
 const dueOf = p => p.due || p.dueUp;   // works at the substation first, otherwise works upstream of it
-let D, state = { scen: 0, kw: [...DEFAULT_KW], all: false };
+const ctype = c => !c ? 'none' : /Substation/.test(c) && /Upstream/.test(c) ? 'both' : /Substation/.test(c) ? 'substation' : /Upstream/.test(c) ? 'upstream' : 'other';
+const areaName = a => a === 'SEPD' ? 'Southern England' : 'North of Scotland';
+let D, bspIdx, groups, state = { scen: 0, kw: [...DEFAULT_KW], all: false };
+
+const mvaAt = (p, s, j, kw) => kw.reduce((a, k, g) => a + k * p.d[s][g][j], 0) / 1000;   // kW treated as kVA
+const runYear = (p, s, kw, h = p.h) => { for (let j = 0; j < D.years.length; j++) if (mvaAt(p, s, j, kw) >= h) return D.years[j]; return null; };
 
 function compute() {
-  const rows = D.open.map(p => {
+  return D.open.map(p => {
     const series = p.d[state.scen];
     let year = null, share = null;
     for (let j = 0; j < D.years.length; j++) {
-      const parts = state.kw.map((k, g) => k * series[g][j] / 1000), mva = parts.reduce((a, b) => a + b, 0); // kW treated as kVA
+      const parts = state.kw.map((k, g) => k * series[g][j] / 1000), mva = parts.reduce((a, b) => a + b, 0);
       if (mva >= p.h) { year = D.years[j]; share = parts.map(x => x / mva); break; }
     }
     const due = dueYear(dueOf(p));
@@ -44,29 +51,34 @@ function compute() {
     const cover = year == null ? null : due == null ? 'none' : due <= year ? 'intime' : 'late';
     return { ...p, year, share, dueYear: due, cover };
   });
-  return rows;
+}
+// Growth at every primary under a bulk supply point, set against that point's own headroom.
+function bspTest() {
+  const out = [];
+  for (const [k, ps] of groups) {
+    const b = bspIdx.get(k); if (!b || !(b.h > 0)) continue;
+    let year = null;
+    for (let j = 0; j < D.years.length; j++) if (ps.reduce((a, p) => a + mvaAt(p, state.scen, j, state.kw), 0) >= b.h) { year = D.years[j]; break; }
+    const under = ps.filter(p => p.h > 0).map(p => ({ p, y: runYear(p, state.scen, state.kw) }));
+    out.push({ b, year, prims: ps.length, under, sooner: under.filter(u => year && (!u.y || year < u.y)).length });
+  }
+  return out;
 }
 
 function render() {
   const rows = compute(), out = rows.filter(r => r.year != null), not = rows.length - out.length;
   const by = y => out.filter(r => r.year <= y).length;
   const exposed = out.filter(r => r.cover !== 'intime'), intime = out.length - exposed.length;
-  const zero = D.zero, zDated = zero.filter(p => dueYear(dueOf(p)) != null), zNone = zero.length - zDated.length;
-  const zYears = {}; for (const p of zDated) { const y = dueYear(dueOf(p)); zYears[y] = (zYears[y] || 0) + 1; }
-  const zMax = Math.max(zNone, ...Object.values(zYears));
   const perYear = D.years.map(y => ({ y, a: out.filter(r => r.year === y && r.cover === 'intime').length, b: out.filter(r => r.year === y && r.cover !== 'intime').length }));
   const cmax = Math.max(1, ...perYear.map(c => c.a + c.b));
   const driver = r => { const i = r.share.indexOf(Math.max(...r.share)); return `${D.groups[i]} ${fmt(r.share[i] * 100)}%`; };
-  const soon = [...exposed].sort((a, b) => a.year - b.year || a.h - b.h);
-  const shown = state.all ? soon : soon.slice(0, 15);
+  const soon = [...exposed].sort((a, b) => a.year - b.year || a.h - b.h), shown = state.all ? soon : soon.slice(0, 15);
   const tot = g => out.reduce((a, r) => a + r.share[g], 0) / (out.length || 1);
+  const areaRow = a => { const all = rows.filter(r => r.a === a), o = out.filter(r => r.a === a); return `<tr><td>${areaName(a)}</td><td class="r">${all.length}</td><td class="r">${o.filter(r => r.year <= 2035).length}</td><td class="r">${o.length}</td><td class="r">${D.zero.filter(p => p.a === a).length}</td></tr>`; };
+  const bt = bspTest(), btRun = bt.filter(x => x.year), underAll = bt.reduce((a, x) => a + x.under.length, 0), soonerAll = bt.reduce((a, x) => a + x.sooner, 0);
 
   $('#result').innerHTML = `
-  <div class="answer">
-    <p>${N(zero.length)} of SSEN's ${fmt(D.primaries)} primaries already have no demand headroom. Of the ${fmt(rows.length)} that still have some, ${N(out.length)} would use it up by ${D.years.at(-1)} under these settings, and ${N(exposed.length)} of those have no reinforcement listed to arrive in time.</p>
-  </div>
-
-  <h2>Primaries with headroom today</h2>
+  <h2>Primaries with headroom today, under these settings</h2>
   <div class="figs3">
     <div><b>${by(2030)}</b><span>run out by 2030</span></div>
     <div><b>${by(2035)}</b><span>run out by 2035</span></div>
@@ -76,9 +88,10 @@ function render() {
     <div class="key"><span><span class="sq" style="background:var(--s2)"></span>No reinforcement listed, or listed for a later year</span><span><span class="sq" style="background:var(--s1)"></span>Reinforcement listed to complete in time</span></div>
     <div class="colchart">${perYear.map(c => `<div class="c" data-tip="${c.y}\n${c.a + c.b} primaries run out\n${c.b} with no reinforcement in time\n${c.a} with reinforcement in time"><i class="b" style="height:${c.b / cmax * 88}%"></i><i class="a" style="height:${c.a / cmax * 88}%"></i><span>${c.a + c.b || ''}</span></div>`).join('')}</div>
     <div class="colx">${D.years.map(y => `<span>${String(y).slice(2)}</span>`).join('')}</div>
-    <figcaption>Number of primaries whose modelled growth in demand first exceeds their published headroom, by year, 20${String(D.years[0]).slice(2)} to 20${String(D.years.at(-1)).slice(2)}. Under these settings ${fmt(intime)} of the ${fmt(out.length)} have works listed in time.</figcaption>
+    <figcaption>Primaries whose modelled growth first exceeds their published headroom, by year. Under these settings ${fmt(intime)} of the ${fmt(out.length)} that run out have works listed in time.</figcaption>
   </figure>
-  <p>On average across the primaries that run out, ${D.groups.map((g, i) => `${g.toLowerCase()} account for ${N(tot(i) * 100)}%`).filter((_, i) => tot(i) >= .005).join(', ')} of the added demand in the year they cross the line.</p>
+  <p>On average across the primaries that run out, ${D.groups.map((g, i) => ({ g, v: tot(i) })).filter(x => x.v >= .005).map(x => `${x.g.toLowerCase()} account for ${N(x.v * 100)}%`).join(', ')} of the added demand in the year they cross the line.</p>
+  ${`<div class="scroll"><table><thead><tr><th>Licence area</th><th class="r">Primaries with headroom</th><th class="r">Run out by 2035</th><th class="r">By ${D.years.at(-1)}</th><th class="r">Already at zero</th></tr></thead><tbody>${areaRow('SEPD')}${areaRow('SHEPD')}</tbody></table></div>`}
 
   <h3 style="font:600 17px var(--cond);margin:26px 0 8px">Soonest to run out with no reinforcement in time</h3>
   <div class="scroll"><table><thead><tr><th>Primary</th><th>Area</th><th class="r">Headroom now, MVA</th><th>Runs out</th><th>Largest driver</th><th>Reinforcement listed</th></tr></thead><tbody>
@@ -86,19 +99,43 @@ function render() {
   </tbody></table></div>
   ${soon.length > 15 ? `<button class="more" id="all">${state.all ? 'Show the first 15' : `Show all ${soon.length}`}</button>` : ''}
 
-  <h2>Primaries already at zero</h2>
-  <p>${N(zero.length)} primaries are published with no demand headroom at all. For these the question is how long until relief arrives. ${N(zDated.length)} have reinforcement listed with a completion date, at the substation or upstream of it. ${N(zNone)} have none listed.</p>
-  <figure>
-    <div class="hb">${Object.keys(zYears).sort().map(y => `<div class="lab">Due in ${y}</div><div class="trk" data-tip="${zYears[y]} primaries at zero headroom have reinforcement due in ${y}"><i style="width:${zYears[y] / zMax * 100}%"></i></div><div class="val">${zYears[y]}</div>`).join('')}
-      <div class="lab">None listed</div><div class="trk" data-tip="${zNone} primaries at zero headroom have no reinforcement listed"><i class="dim" style="width:${zNone / zMax * 100}%"></i></div><div class="val">${zNone}</div></div>
-    <figcaption>Zero-headroom primaries by the year their listed reinforcement is due to complete.</figcaption>
-  </figure>`;
+  <h2>Shared headroom upstream</h2>
+  <p>Primaries are tested one at a time above, but several often sit under one bulk supply point and draw on its capacity together. In southern England, where bulk supply points are listed, I added up the growth at every primary under each one and set it against that point's own headroom.</p>
+  <p>Of the ${N(bt.length)} bulk supply points with headroom today, ${N(btRun.filter(x => x.year <= 2035).length)} run out by 2035 and ${N(btRun.length)} by ${D.years.at(-1)} under these settings. For ${N(soonerAll)} of the ${fmt(underAll)} primaries beneath them, the bulk supply point runs out before the primary itself would. So the primary-by-primary count above understates the problem in the south.</p>
+  <div class="scroll"><table><thead><tr><th>Bulk supply point</th><th class="r">Headroom now, MVA</th><th class="r">Primaries under it</th><th>Runs out</th><th>Reinforcement listed</th></tr></thead><tbody>
+    ${btRun.sort((a, b) => a.year - b.year).slice(0, 12).map(x => `<tr><td>${esc(x.b.n)}</td><td class="r">${fmt(x.b.h, 1)}</td><td class="r">${x.prims}</td><td><span class="n">${x.year}</span></td><td>${esc(dueOf(x.b) || 'none')}</td></tr>`).join('')}
+  </tbody></table></div>
+  <p class="small">The ${btRun.length > 12 ? 'first 12 to run out' : 'bulk supply points that run out'}. In the north of Scotland, 132 kV is part of the transmission system and most primaries are fed directly from a grid supply point, so this test does not apply there.</p>`;
   $('#all')?.addEventListener('click', () => { state.all = !state.all; render(); });
 }
 
 function shell() {
+  bspIdx = new Map(D.bsps.map(b => [b.a + '|' + norm(b.n), b]));
+  groups = new Map();
+  for (const p of [...D.open, ...D.zero]) if (p.d && p.bsp) { const k = p.a + '|' + norm(p.bsp); (groups.get(k) || groups.set(k, []).get(k)).push(p); }
+
+  // range across scenarios and the two ends of car charging, everything else at default
+  const range = D.scenarios.map((s, si) => ({ s, v: EV_RANGE.map(ev => { const kw = [DEFAULT_KW[0], DEFAULT_KW[1], ev, DEFAULT_KW[3]]; const ys = D.open.map(p => runYear(p, si, kw)); return { y35: ys.filter(y => y && y <= 2035).length, y40: ys.filter(Boolean).length }; }) }));
+  const all35 = range.flatMap(r => r.v.map(v => v.y35)), all40 = range.flatMap(r => r.v.map(v => v.y40));
+  const z = D.zero, zc = t => z.filter(p => ctype(p.con) === t).length, zUp = zc('upstream') + zc('both');
+  const zDated = z.filter(p => dueYear(dueOf(p)) != null), zNone = z.length - zDated.length, zNoneUp = z.filter(p => dueYear(dueOf(p)) == null && ['upstream', 'both'].includes(ctype(p.con))).length;
+  const zYears = {}; for (const p of zDated) { const y = dueYear(dueOf(p)); zYears[y] = (zYears[y] || 0) + 1; }
+  const zMax = Math.max(zNone, ...Object.values(zYears));
+  const accounted = z.length + D.open.length + D.unmatched.length + D.noFigure.length;
+
   $('#out').innerHTML = `
   <p class="snapshot">Snapshot built ${day(D.computed)} from two SSEN files: <b>${esc(D.sources.headroom.name)}</b> and <b>${esc(D.sources.dfes.name)}</b>. The figures below are worked out in your browser from that snapshot, so they change as you move the settings.</p>
+
+  <h2>Short answer</h2>
+  <div class="answer">
+    <p>Many already have, mostly because of the network above them. ${N(z.length)} of SSEN's ${fmt(D.primaries)} primaries have no demand headroom today, and for ${N(zUp)} of those the limit SSEN cites is upstream. Of the ${fmt(D.open.length)} that still have some, between ${N(Math.min(...all35))} and ${N(Math.max(...all35))} would use it up by 2035, depending on the scenario and how cars are charged.</p>
+  </div>
+  <p>The ${fmt(D.primaries)} primaries break down as ${fmt(z.length)} at zero, ${fmt(D.open.length)} with headroom and a matching projection, and ${fmt(D.unmatched.length)} with headroom that could not be matched to a projection${D.noFigure.length ? `, plus ${D.noFigure.length} with no figure` : ''}${accounted !== D.primaries ? ` (${D.primaries - accounted} unaccounted for)` : ''}.</p>
+  <div class="scroll"><table><thead><tr><th>Primaries that run out</th><th class="r" colspan="2">By 2035</th><th class="r" colspan="2">By ${D.years.at(-1)}</th></tr>
+    <tr><th>SSEN scenario</th><th class="r">Managed charging, ${EV_RANGE[0]} kW</th><th class="r">Unmanaged, ${EV_RANGE[1]} kW</th><th class="r">Managed</th><th class="r">Unmanaged</th></tr></thead><tbody>
+    ${range.map(r => `<tr><td>${esc(r.s)}</td><td class="r">${r.v[0].y35}</td><td class="r">${r.v[1].y35}</td><td class="r">${r.v[0].y40}</td><td class="r">${r.v[1].y40}</td></tr>`).join('')}
+  </tbody></table></div>
+  <p class="small">Out of ${fmt(D.open.length)} primaries with headroom. Heat pumps, hybrids and new homes are held at the defaults below; only the car figure changes. How cars are charged moves the answer as much as which scenario comes true.</p>
 
   <h2>Settings</h2>
   <div class="controls">
@@ -108,18 +145,26 @@ function shell() {
       <input type="range" id="kw${i}" min="${KW_RANGE[i][0]}" max="${KW_RANGE[i][1]}" step="0.1" value="${state.kw[i]}"></label>`).join('')}
     <div class="wide"><button id="reset">Reset to defaults</button></div>
   </div>
-  <p class="small">The four sliders set how much each new device adds to peak demand, in kW. The defaults are my assumptions, not SSEN's: see “What this cannot tell you”.</p>
-
-  <h2>Short answer</h2>
+  <p class="small">How much each new device adds to the evening peak, in kW. The defaults are my assumptions, not SSEN's. The car default sits midway between managed and unmanaged charging.</p>
   <div id="result"></div>
+
+  <h2>Primaries already at zero</h2>
+  <p>${N(z.length)} primaries are published with no demand headroom. For ${N(zc('upstream'))} the constraint SSEN cites is only upstream, at the bulk or grid supply point above; for ${N(zc('both'))} it is both upstream and at the substation; and for ${N(zc('substation'))} it is the substation alone. So most are full because of the network above them, and the fix sits at a higher voltage than the primary.</p>
+  <p>${N(zDated.length)} have reinforcement listed with a completion date, at the substation or upstream. ${N(zNone)} have none listed, and ${N(zNoneUp)} of those are limited upstream. Some of these may be managed with flexibility contracts rather than new equipment, which the headroom file does not show.</p>
+  <figure>
+    <div class="hb">${Object.keys(zYears).sort().map(y => `<div class="lab">Due in ${y}</div><div class="trk" data-tip="${zYears[y]} zero-headroom primaries have reinforcement due in ${y}"><i style="width:${zYears[y] / zMax * 100}%"></i></div><div class="val">${zYears[y]}</div>`).join('')}
+      <div class="lab">None listed</div><div class="trk" data-tip="${zNone} zero-headroom primaries have no reinforcement listed"><i class="dim" style="width:${zNone / zMax * 100}%"></i></div><div class="val">${zNone}</div></div>
+    <figcaption>Zero-headroom primaries by the year their listed reinforcement is due to complete.</figcaption>
+  </figure>
 
   <h2>Method</h2>
   <ol>
-    <li>Take each primary's estimated demand headroom from SSEN's headroom file.</li>
-    <li>Take SSEN's Distribution Future Energy Scenarios, which project numbers of heat pumps, electric vehicles and new homes for the area each primary supplies, year by year, and add up the growth since the baseline.</li>
+    <li>Take each primary's estimated demand headroom, demand constraint and bulk supply point from SSEN's headroom file.</li>
+    <li>Take SSEN's Distribution Future Energy Scenarios, which project domestic heat pumps, hybrid heat pumps, electric cars and vans, and new homes for the area each primary supplies, year by year. Subtract ${esc(D.baseline)} to get growth.</li>
     <li>Multiply each count by an assumed contribution to peak demand and add them together.</li>
-    <li>The run-out year is the first year that total reaches the headroom.</li>
+    <li>The run-out year is the first year that total reaches the headroom published today.</li>
     <li>Compare it with the completion date of any reinforcement SSEN lists for that substation, or failing that for the network upstream of it.</li>
+    <li>For bulk supply points, add up the growth at every primary under each one, including primaries already at zero, and compare with the bulk supply point's own headroom.</li>
   </ol>
   <pre>added demand (MVA) = (heat pumps × kW + hybrids × kW + cars and vans × kW + new homes × kW) / 1000
 run-out year       = first year added demand ≥ headroom published today</pre>
@@ -127,19 +172,22 @@ run-out year       = first year added demand ≥ headroom published today</pre>
 
   <h2>What this cannot tell you</h2>
   <ul>
-    <li><b>The kW figures are assumptions.</b> Real planning uses half-hourly profiles, not one number per device. An electric car on a smart tariff adds far less to the evening peak than one plugged in at 6 pm, which is why the car slider goes down to zero. Move the sliders to see how much the answer depends on them.</li>
-    <li><b>Only three kinds of growth are counted.</b> Non-domestic heat, data centres, air conditioning, new commercial floorspace and large new connections are left out, so demand growth is understated. Rooftop solar, home batteries, efficiency gains and flexibility contracts are also left out, which works the other way.</li>
-    <li><b>Running out is not a power cut.</b> It means new load can no longer be accepted without reinforcement, curtailable connections or bought-in flexibility. SSEN has all three available.</li>
-    <li><b>Headroom is shared upstream.</b> Many primaries are limited by the bulk or grid supply point above them. Growth at neighbouring primaries draws on the same upstream capacity, which this treats as independent, so some will run out sooner than shown.</li>
-    <li><b>Listed works may not be for demand.</b> A reinforcement entry is counted as relief whatever its purpose. Some are for generation or fault level and would not add demand capacity.</li>
+    <li><b>The kW figures are assumptions.</b> Real planning uses half-hourly profiles, not one number per device. The range table shows how much the car figure alone moves the answer.</li>
+    <li><b>Headroom may already be spoken for.</b> SSEN's estimate can include demand that has been contracted but not yet connected, so a primary at zero may have spare physical capacity today that is reserved on paper.</li>
+    <li><b>Only domestic growth is counted.</b> Non-domestic heat, data centres, air conditioning, new commercial floorspace and large new connections are left out, so demand growth is understated. Rooftop solar, home batteries, efficiency gains and flexibility contracts are also left out, which works the other way.</li>
+    <li><b>Vans include fleets.</b> Electric vans are counted in full, though fleet vans often charge at depots on separate connections.</li>
+    <li><b>Flexibility is not visible.</b> SSEN buys demand reduction to defer reinforcement. A primary with no works listed may be managed that way.</li>
+    <li><b>Listed works may not be for demand.</b> A reinforcement entry is counted as relief whatever its purpose.</li>
+    <li><b>kW is treated as kVA.</b> Allowing for power factor would add a few per cent to the added demand.</li>
     <li><b>Scenarios are not forecasts.</b> The four scenarios are deliberately different futures. None is SSEN's prediction.</li>
-    <li><b>The two files are from different dates.</b> The projections count growth from their own baseline, which may sit a little before the headroom snapshot, so some of that growth may already be inside today's headroom figure.</li>
-    <li><b>One snapshot.</b> SSEN publishes only its latest headroom file, so this cannot yet be checked against how headroom has actually moved over time.</li>
+    <li><b>The two files are from different dates.</b> The projections count growth from an undated baseline, so some of that growth may already be inside today's headroom figure.</li>
+    <li><b>One snapshot.</b> SSEN publishes only its latest headroom file, so this cannot yet be checked against how headroom has actually moved.</li>
   </ul>
 
   <h2>Data and reproduction</h2>
   <p>Headroom: <b>${esc(D.sources.headroom.name)}</b>, updated ${day(D.sources.headroom.modified)}. Projections: <b>${esc(D.sources.dfes.name)}</b>, updated ${day(D.sources.dfes.modified)}, produced by Regen for SSEN. Both from SSEN Distribution open data.</p>
-  <p>The snapshot is <a href="data/04-runout.json">data/04-runout.json</a>, built by <span class="n">analysis/04-run.html</span> in the <a href="https://github.com/nirdeshacharya/grid-labs/tree/main/analysis">repository</a>. It keeps projections for 2026 to 2040 only.</p>`;
+  <p>The snapshot is <a href="data/04-runout.json">data/04-runout.json</a>, built by <span class="n">analysis/04-run.html</span> in the <a href="https://github.com/nirdeshacharya/grid-labs/tree/main/analysis">repository</a>. It keeps projections for 2026 to 2040 only.</p>
+  <p class="small">Revised 20 November 2026 after review: the short answer now gives a range instead of one assumption-bound number, the car default moved from 1.0 to 0.6 kW, and the shared-headroom test, constraint breakdown and licence-area split were added.</p>`;
 
   const sync = () => { state.kw.forEach((k, i) => { $('#kw' + i).value = k; $('#kwv' + i).textContent = fmt(k, 1) + ' kW'; }); $('#scen').value = state.scen; };
   sync(); render();

@@ -44,20 +44,26 @@ async function run() {
   }
 
   const hf = await latestResource('generation-availability-and-network-capacity', /headroom dashboard data/i);
-  const head = (await fetchAll(hf.id)).filter(r => r['Substation Type'] === 'Primary');
+  const headAll = await fetchAll(hf.id), head = headAll.filter(r => r['Substation Type'] === 'Primary');
   const zero = [], open = [], unmatched = [], noFigure = [];
   for (const r of head) {
     const a = areaOf(r.map___license_area), h = num(r.estimated_demand_headroom__mva_), name = String(r.Substation).replace(/ Primary$/, '');
-    const base = { n: name, a, con: r['Demand Constraint'] || null, due: r['Substation Reinforcement Completion Date'] || null, dueUp: r['Upstream Reinforcement Completion Date'] || null };
+    const base = { n: name, a, con: r['Demand Constraint'] || null, bsp: r['Upstream BSP'] && r['Upstream BSP'] !== 'N/A' ? r['Upstream BSP'] : null, gsp: r['Upstream GSP'] || null,
+      due: r['Substation Reinforcement Completion Date'] || null, dueUp: r['Upstream Reinforcement Completion Date'] || null };
     if (h == null) { noFigure.push(name); continue; }
-    if (h <= 0) { zero.push(base); continue; }
     const d = D.get(a + '|' + norm(r.Substation));
+    // zero-headroom primaries keep their projections too, because they still add load to the bulk supply point above them
+    const proj = d ? { d: d.map(s => s.map(g => Array.from(g, Math.round))) } : {};
+    if (h <= 0) { zero.push({ ...base, ...proj }); continue; }
     if (!d) { unmatched.push({ ...base, h }); continue; }
-    open.push({ ...base, h, rag: r['Substation Demand RAG Status'], d: d.map(s => s.map(g => Array.from(g, Math.round))) });
+    open.push({ ...base, h, rag: r['Substation Demand RAG Status'], ...proj });
   }
-  return { computed: new Date().toISOString(), years: YEARS, scenarios: SCENARIOS, groups: GROUPS,
+  // bulk supply points, for testing headroom that neighbouring primaries share
+  const bsps = headAll.filter(r => r['Substation Type'] === 'BSP').map(r => ({ n: r.Substation, a: areaOf(r.map___license_area), h: num(r.estimated_demand_headroom__mva_),
+    con: r['Demand Constraint'] || null, due: r['Substation Reinforcement Completion Date'] || null, dueUp: r['Upstream Reinforcement Completion Date'] || null }));
+  return { computed: new Date().toISOString(), years: YEARS, scenarios: SCENARIOS, groups: GROUPS, baseline: 'the workbook\'s Baseline column, which the file does not date',
     sources: { headroom: { name: hf.name, modified: hf.modified }, dfes: { name: book.name, modified: book.last_modified } },
-    primaries: head.length, zero, open, unmatched, noFigure };
+    primaries: head.length, zero, open, unmatched, noFigure, bsps };
 }
 run().then(r => { window._result = r; const s = JSON.stringify(r); document.getElementById('json').value = s;
   document.getElementById('status').textContent = `done: ${r.open.length} primaries with headroom and projections, ${r.zero.length} at zero, ${r.unmatched.length} unmatched, ${(s.length / 1024).toFixed(0)} KB`; })

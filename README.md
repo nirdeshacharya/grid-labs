@@ -7,8 +7,8 @@ Each entry asks one question, shows the method, states the result and lists what
 | Entry | Question | Status |
 |---|---|---|
 | 01 | Is more generation contracted than the grid supply points can carry? | Finding |
-| 02 | Do faults rise with wind, and where do they rise most? | Finding (snapshot) |
-| 04 | Which primaries will run out of headroom before their reinforcement arrives? | Finding (snapshot, adjustable) |
+| 02 | At what wind speed do faults take off, and which places are most sensitive? | Finding (snapshot) |
+| 04 | Where could home electrification use up substation headroom before upgrades arrive? | Finding (snapshot, adjustable) |
 
 Static site, no build step. To run locally:
 
