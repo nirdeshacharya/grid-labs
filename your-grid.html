@@ -17,19 +17,53 @@
   .examples { font-size: 13px; color: var(--ink-3); }
   .examples button { font: inherit; color: var(--ink-2); background: none; border: 0; padding: 0; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
   .story { margin-top: 26px; }
-  .story h2 { margin-top: 34px; }
-  .story p { font-size: 17px; }
-  .place { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 20px; align-items: start; }
-  .place svg { width: 100%; height: auto; display: block; }
-  .place svg path { fill: var(--fill); stroke: var(--ink-3); stroke-width: 1; vector-effect: non-scaling-stroke; }
-  .place svg circle { fill: var(--signal); stroke: var(--ink); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-  .place figcaption { margin-top: 4px; }
-  @media (max-width: 560px) { .place { grid-template-columns: 1fr; } .place figure { max-width: 220px; } }
-  .spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 34px; vertical-align: -6px; margin: 0 6px; }
-  .spark i { display: block; width: 7px; background: var(--s1); border-radius: 1px 1px 0 0; min-height: 1px; }
-  .pill { font: 500 13px var(--sans); white-space: nowrap; }
-  .pill i { font-style: normal; margin-right: 3px; }
-  .muted { color: var(--ink-3); }
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 24px; align-items: start; margin-bottom: 18px; }
+  .hero figure { margin: 0; }
+  .hero svg { width: 100%; height: auto; display: block; }
+  .hero svg path { fill: var(--fill); stroke: var(--ink-3); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .hero svg circle { fill: var(--signal); stroke: var(--ink); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .kicker { font: 500 13px var(--mono); color: var(--ink-3); margin: 0 0 4px; }
+  .big { font: 600 26px/1.25 var(--cond); margin: 0 0 14px; max-width: none; }
+  .chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
+  .chain span { position: relative; font-size: 14px; font-weight: 500; background: var(--fill); border-radius: 2px; padding: 6px 10px; }
+  .chain span + span::before { content: "→"; position: absolute; left: -11px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--ink-3); }
+  .chain span.me { background: var(--ink); color: var(--panel); }
+  .chain span.you { background: var(--signal); color: #15211e; }
+  .chain small { display: block; font-size: 11.5px; font-weight: 400; opacity: .75; }
+  .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; padding: 14px 16px 12px; min-width: 0; }
+  .card.wide { grid-column: span 2; }
+  @media (max-width: 560px) { .hero { grid-template-columns: 1fr; } .hero figure { max-width: 200px; } .cards { grid-template-columns: 1fr; } .card.wide { grid-column: auto; } }
+  .card h3 { font: 600 12px var(--cond); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); margin: 0 0 8px; }
+  .card .num { font: 500 30px/1.1 var(--mono); letter-spacing: -.02em; margin: 0 0 6px; max-width: none; }
+  .card .num small { font: 13px var(--sans); letter-spacing: 0; color: var(--ink-2); }
+  .card .note { font-size: 13.5px; color: var(--ink-2); margin: 8px 0 0; max-width: none; }
+  .chip { display: inline-flex; gap: 5px; align-items: center; font: 600 12.5px var(--sans); padding: 2px 9px 2px 7px; border-radius: 10px; background: var(--fill); }
+  .chip i { font-style: normal; color: var(--c, var(--na)); }
+  .cols { display: flex; align-items: flex-end; gap: 3px; height: 70px; margin-top: 6px; }
+  .cols div { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+  .cols i { display: block; width: 100%; background: var(--s1); border-radius: 2px 2px 0 0; min-height: 1px; }
+  .cols span { font: 10px var(--mono); color: var(--ink-3); margin-top: 3px; }
+  .strip { position: relative; height: 26px; margin-top: 10px; border-bottom: 1px solid var(--rule); }
+  .strip i { position: absolute; bottom: 0; width: 1.5px; height: 12px; background: var(--na); opacity: .6; }
+  .strip b { position: absolute; bottom: 0; width: 4px; height: 24px; margin-left: -1.5px; background: var(--signal); border: 1px solid var(--ink); border-radius: 1px; }
+  .stripx { display: flex; justify-content: space-between; font: 10px var(--mono); color: var(--ink-3); margin-top: 3px; }
+  .rbar { position: relative; display: flex; gap: 2px; height: 16px; margin: 8px 0 6px; background: var(--fill); }
+  .rbar i.a { background: var(--s1); } .rbar i.b { background: var(--s2); }
+  .rbar u { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); }
+  .lct { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .lct .num { font-size: 24px; }
+  .g100 { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; max-width: 120px; }
+  .g100 i { aspect-ratio: 1; background: var(--fill); border-radius: 1px; }
+  .tl { position: relative; height: 44px; margin-top: 10px; }
+  .tlbar { position: absolute; top: 10px; left: 0; right: 0; height: 6px; background: var(--fill); border-radius: 3px; }
+  .tlband { position: absolute; top: 10px; height: 6px; background: var(--s2); opacity: .45; border-radius: 3px; }
+  .tl b { position: absolute; top: 3px; width: 4px; height: 20px; margin-left: -2px; background: var(--ink); border-radius: 1px; }
+  .tlx { position: absolute; top: 26px; left: 0; right: 0; display: flex; justify-content: space-between; font: 10px var(--mono); color: var(--ink-3); }
+  .now { display: flex; gap: 24px; flex-wrap: wrap; }
+  .astext { margin-top: 18px; }
+  .astext summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
+  .astext p { font-size: 15px; }
   .loading { min-height: 3em; }
 </style>
 </head>
@@ -98,6 +132,32 @@ function headroomFor(a) {
   return rows.find(r => norm(r.Substation) === k) || rows.find(r => stripName(r.Substation) === ks) || rows.find(r => { const x = norm(r.Substation); return x.length > 4 && (x.startsWith(ks) || ks.startsWith(x)); }) || null;
 }
 
+// ---- small visual pieces ----
+const chip = (s, label) => RAG[s] ? `<span class="chip" style="--c:var(${RAG[s][0]})"><i>${RAG[s][1]}</i>${label || RAG[s][2]}</span>` : '<span class="chip">no status</span>';
+const CI_RAG = { 'very low': 'Green', low: 'Green', moderate: 'Amber', high: 'Red', 'very high': 'Red' };
+function columns(vals, first) {
+  const max = Math.max(...vals, 1);
+  return `<div class="cols" role="img" aria-label="Faults per year, ${first} to ${first + vals.length - 1}: ${vals.join(', ')}">${vals.map((v, i) => `<div data-tip="${first + i}: ${v} faults"><i style="height:${v / max * 100}%"></i><span>${String(first + i).slice(2)}</span></div>`).join('')}</div>`;
+}
+// a row of every district's value, with this one picked out
+function strip(values, mine, label, fmtv) {
+  const max = Math.max(...values, mine) * 1.05;
+  return `<div class="strip" role="img" aria-label="${esc(label)}">${values.map(v => `<i style="left:${v / max * 100}%"></i>`).join('')}<b style="left:${mine / max * 100}%" data-tip="${esc(label)}"></b></div><div class="stripx"><span>${fmtv(0)}</span><span>${fmtv(max)}</span></div>`;
+}
+// ten-by-ten grid: how many of every 100 customers have one
+const grid100 = (per100, colour) => { const n = Math.min(100, Math.round(per100)); return `<div class="g100" role="img" aria-label="${fmt(per100, 1)} per 100 customers">${Array.from({ length: 100 }, (_, i) => `<i${i < n ? ` style="background:var(${colour})"` : ''}></i>`).join('')}</div>`; };
+function timeline(def, lo, hi) {
+  const x = y => (Math.min(2041, y) - 2026) / 15 * 100, ys = [lo, hi].map(v => v || 2041).sort((a, b) => a - b);
+  return `<div class="tl"><div class="tlbar"></div>${ys[0] !== ys[1] ? `<div class="tlband" style="left:${x(ys[0])}%;width:${x(ys[1]) - x(ys[0])}%"></div>` : ''}${def ? `<b style="left:${x(def)}%"></b>` : ''}<div class="tlx"><span>2026</span><span>2030</span><span>2035</span><span>2040</span></div></div>`;
+}
+function ratioBar(conn, contr, total) {
+  const max = Math.max(1.2, (conn + contr) / total * 1.08), w = v => v / total / max * 100;
+  return `<div class="rbar" role="img" aria-label="${fmt(conn)} MW connected and ${fmt(contr)} MW contracted against ${fmt(total)} MVA of transformers"><i class="a" style="width:${w(conn)}%"></i><i class="b" style="width:${w(contr)}%"></i><u style="left:${100 / max}%"></u></div><div class="key"><span><span class="sq" style="background:var(--s1)"></span>connected</span><span><span class="sq" style="background:var(--s2)"></span>contracted</span><span>line: transformer rating</span></div>`;
+}
+const card = (title, body, wide) => ({ wide, html: `<section class="card${wide ? ' wide' : ''}"><h3>${title}</h3>${body}</section>` });
+// narrow cards sit in pairs; a narrow card left without a partner is widened so the grid has no holes
+function layoutCards(list) { const out = []; let pending = null; for (const c of list) { if (c.wide) { out.push(c); continue; } if (pending) { out.push(pending, c); pending = null; } else pending = c; } if (pending) out.push({ html: pending.html.replace('class="card"', 'class="card wide"') }); return out.map(c => c.html).join(''); }
+
 async function tell(pcRaw) {
   const story = $('#story'), pc = pcRaw.trim().toUpperCase().replace(/\s+/g, ' ');
   story.innerHTML = `<p class="loading">Looking up ${esc(pc)}…</p>`;
@@ -107,57 +167,81 @@ async function tell(pcRaw) {
   const { latitude: lat, longitude: lon } = r.result, town = [].concat(r.result.admin_district || [])[0] || [].concat(r.result.parish || [])[0] || '';
   const hit = locate(lon, lat);
   try { history.replaceState(null, '', `?pc=${encodeURIComponent(pc)}`); } catch { /* address bar update is optional */ }
-  if (!hit) { story.innerHTML = `<p>${esc(pc)}${town ? `, in ${esc(town)},` : ''} does not fall inside any of SSEN's supply areas. It is probably served by another distribution network operator.</p>`; return; }
-  const a = hit.a, hr = headroomFor(a), area = a.a === 'SEPD' ? 'central southern England' : 'the north of Scotland';
-  const sub = hr ? plain(hr.Substation) : titleCase(a.n), parts = [];
+  if (!hit) { story.innerHTML = `<p class="big">${esc(pc)}${town ? `, in ${esc(town)},` : ''} is outside SSEN's area. It is probably served by another network operator.</p>`; return; }
+  const a = hit.a, hr = headroomFor(a), sub = hr ? plain(hr.Substation) : titleCase(a.n);
+  const bsp = hr && hr['Upstream BSP'] && hr['Upstream BSP'] !== 'N/A' ? plain(hr['Upstream BSP']) : null, gspName = hr ? plain(hr['Upstream GSP']) : null;
+  const cards = [], text = [], order = [];
 
-  // 1. where
-  parts.push(`<div class="place"><div>
-    <p>${esc(pc)}${approx ? ' (the middle of that postcode district)' : ''} is in ${esc(town || area)}, in SSEN's ${a.a === 'SEPD' ? 'southern' : 'northern'} licence area. ${hit.exact ? 'It is supplied from' : 'It sits on the edge of the area supplied from'} <b>${esc(sub)}</b> primary substation${a.lct ? `, which serves about ${N(a.lct.customers)} customers` : ''}.${hr ? ` That substation is fed from ${esc(plain(hr['Upstream BSP']) !== 'N/A' && hr['Upstream BSP'] && hr['Upstream BSP'] !== 'N/A' ? plain(hr['Upstream BSP']) + ' bulk supply point and ' : '')}${esc(plain(hr['Upstream GSP']))} grid supply point, where SSEN's network meets the national transmission system.` : ''}</p>
-    </div><figure>${outline(a, lon, lat)}<figcaption class="small">The area ${esc(sub)} serves, as SSEN models it. The dot is ${esc(pc)}.</figcaption></figure></div>`);
+  // header: where
+  const head1 = `<div class="hero"><div>
+      <p class="kicker">${esc(pc)}${approx ? ' (district centre)' : ''} · ${esc(town || '')}</p>
+      <p class="big">Supplied from <b>${esc(sub)}</b>${hit.exact ? '' : ' (on the edge of its area)'}</p>
+      <div class="chain"><span>${esc(gspName || '?')}<small>grid supply point</small></span>${bsp ? `<span>${esc(bsp)}<small>bulk supply point</small></span>` : ''}<span class="me">${esc(sub)}<small>primary${a.lct ? `, ${fmt(a.lct.customers)} customers` : ''}</small></span><span class="you">${esc(pc)}<small>you</small></span></div>
+    </div><figure>${outline(a, lon, lat)}<figcaption class="small">The area ${esc(sub)} serves. The dot is ${esc(pc)}.</figcaption></figure></div>`;
+  text.push(`${esc(pc)} is in ${esc(town || 'SSEN\'s area')}, in SSEN's ${a.a === 'SEPD' ? 'southern' : 'northern'} licence area, supplied from ${esc(sub)} primary substation${a.lct ? ` (about ${fmt(a.lct.customers)} customers)` : ''}${gspName ? `, fed through ${bsp ? esc(bsp) + ' bulk supply point and ' : ''}${esc(gspName)} grid supply point` : ''}.`);
 
-  // 2. room on the network (live)
+  // room on the network (live)
   if (hr) {
     const dh = num(hr.estimated_demand_headroom__mva_), gh = num(hr.estimated_generation_headroom__mw_), works = hr['Substation Reinforcement Works'] || hr['Upstream Reinforcement Works'], due = hr['Substation Reinforcement Completion Date'] || hr['Upstream Reinforcement Completion Date'];
-    parts.push(`<h2>Room on the network</h2><p>${dh > 0 ? `SSEN estimates ${esc(sub)} could take about ${N(dh, 1)} MVA more demand` : `SSEN shows no spare capacity at ${esc(sub)} for new demand`}, status ${pill(hr['Substation Demand RAG Status'])}${hr['Demand Constraint'] ? `, limited by ${esc(hr['Demand Constraint'].toLowerCase())}` : ''}. For new generation such as solar panels or a wind turbine, ${gh > 0 ? `there is about ${N(gh, 1)} MW` : 'there is none'}, status ${pill(hr['Substation Generation RAG Status'])}.${works ? ` Reinforcement is planned${due ? `, due ${esc(due)}` : ''}: ${esc(String(works).replace(/\s+/g, ' ').replace(/^Transmission works:\s*/i, 'transmission works, '))}${/[.]$/.test(works) ? '' : '.'}` : ' No reinforcement is listed.'}</p>`);
-    // the grid supply point above, as in entry 01
+    cards.push(card('Room for new demand', `<p class="num">${dh > 0 ? fmt(dh, 1) : '0'}<small> MVA spare</small></p>${chip(hr['Substation Demand RAG Status'])}<p class="note">${dh > 0 ? 'Heat pumps, chargers and new homes can connect.' : 'Full. New load needs an upgrade or a flexible connection.'}${hr['Demand Constraint'] ? ` Limit: ${esc(hr['Demand Constraint'].toLowerCase())}.` : ''}</p>`));
+    cards.push(card('Room for new generation', `<p class="num">${gh > 0 ? fmt(gh, 1) : '0'}<small> MW spare</small></p>${chip(hr['Substation Generation RAG Status'])}<p class="note">${gh > 0 ? 'Solar and wind can still connect here.' : 'Full for new solar or wind.'}</p>`));
+    if (works) cards.push(card('Upgrade planned', `<p class="num">${esc(due || 'date not given')}</p><p class="note">${esc(String(works).replace(/\s+/g, ' ').replace(/^Transmission works:\s*/i, 'Transmission works: ').slice(0, 160))}${String(works).length > 160 ? '…' : ''}</p>`, true));
+    text.push(`Spare capacity: ${dh > 0 ? fmt(dh, 1) + ' MVA for demand' : 'none for new demand'} (${esc(hr['Substation Demand RAG Status'] || 'no status')}), ${gh > 0 ? fmt(gh, 1) + ' MW for generation' : 'none for new generation'} (${esc(hr['Substation Generation RAG Status'] || 'no status')}).${works ? ` Upgrade planned${due ? ' for ' + esc(due) : ''}: ${esc(String(works).replace(/\s+/g, ' '))}` : ' No upgrade listed.'}`);
     const g = head.find(x => x['Substation Type'] === 'GSP' && x.Substation === hr['Upstream GSP']);
     if (g) {
       const tx = units(g['Transformer Nameplate Ratings']), total = tx.reduce((s, v) => s + v, 0), conn = num(g.connected_generation__mw_), contr = num(g.contracted_generation__mw_);
       if (total && conn != null && contr != null) {
         const ratio = (conn + contr) / total;
-        parts.push(`<p>Further up, ${esc(plain(g.Substation))} grid supply point has ${N(conn)} MW of generation connected and ${N(contr)} MW more contracted, against ${N(total)} MVA of transformers. That is ${N(ratio, 1)} times its rating${ratio > 1 ? ', which makes it one of the oversubscribed sites in <a href="01-contracted-generation.html">entry 01</a>' : ''}.</p>`);
+        cards.push(card(`Generation queued at ${esc(plain(g.Substation))}`, `<p class="num">${fmt(ratio, 1)}<small>× its transformer rating</small></p>${ratioBar(conn, contr, total)}<p class="note">${ratio > 1 ? 'More generation is connected or promised than its transformers are rated for. <a href="01-contracted-generation.html">Entry 01</a>' : 'Within its transformer rating.'}</p>`, true));
+        text.push(`Its grid supply point, ${esc(plain(g.Substation))}, has ${fmt(conn)} MW of generation connected and ${fmt(contr)} MW contracted against ${fmt(total)} MVA of transformers, ${fmt(ratio, 1)} times its rating.`);
       }
     }
-  } else parts.push(`<h2>Room on the network</h2><p class="muted">SSEN's headroom file has no entry that matches ${esc(titleCase(a.n))}, so its spare capacity is not shown.</p>`);
+  } else { cards.push(card('Room on the network', `<p class="note">SSEN's headroom file has no matching entry for ${esc(titleCase(a.n))}.</p>`)); text.push('SSEN\'s headroom file has no matching entry for this substation.'); }
 
-  // 3. fault record
+  // fault record
   if (a.f && a.lct?.customers) {
-    const n = a.f.years.reduce((s, v) => s + v, 0), per = a.f.cml / a.lct.customers / a.f.years.length, max = Math.max(...a.f.years, 1);
-    const spark = `<span class="spark" role="img" aria-label="Faults per year, ${A.years[0]} to ${A.years[1]}" title="Faults per year, ${A.years[0]} to ${A.years[1]}">${a.f.years.map((v, i) => `<i title="${A.years[0] + i}: ${v}" style="height:${v / max * 100}%"></i>`).join('')}</span>`;
-    const cmp = per > medianCml * 1.5 ? 'well above' : per > medianCml * 1.1 ? 'above' : per < medianCml / 1.5 ? 'well below' : per < medianCml / 1.1 ? 'below' : 'close to';
-    parts.push(`<h2>How often it fails</h2><p>Between ${A.years[0]} and ${A.years[1]}, SSEN recorded ${N(n)} high-voltage faults on the network fed from ${esc(sub)}${spark}. Spread across its customers, they cost about ${N(per)} minutes of supply per customer per year, ${cmp} the middle of SSEN's primaries, ${N(medianCml)} minutes. The biggest single cause was “${esc(lowerFirst(String(a.f.top)))}”, with ${N(a.f.topShare)}% of the minutes lost.</p>`);
-  } else parts.push(`<h2>How often it fails</h2><p class="muted">No fault records could be matched to this substation.</p>`);
+    const n = a.f.years.reduce((s, v) => s + v, 0), per = a.f.cml / a.lct.customers / a.f.years.length;
+    const all = A.areas.filter(x => x.f && x.lct?.customers >= 200).map(x => x.f.cml / x.lct.customers / x.f.years.length);
+    const word = per > medianCml * 1.5 ? 'well above' : per > medianCml * 1.1 ? 'above' : per < medianCml / 1.5 ? 'well below' : per < medianCml / 1.1 ? 'below' : 'about';
+    cards.push(card('Faults, 2016 to 2025', `<p class="num">${fmt(n)}<small> high-voltage faults</small></p>${columns(a.f.years, A.years[0])}<p class="note">Biggest cause: ${esc(lowerFirst(String(a.f.top)))} (${a.f.topShare}% of minutes lost).</p>`));
+    cards.push(card('Minutes off supply a year', `<p class="num">${fmt(per)}<small> per customer</small></p>${strip(all.map(v => Math.min(v, 400)), Math.min(per, 400), `${sub}: ${fmt(per)} minutes; each tick is another SSEN primary`, v => fmt(v))}<p class="note">${word === 'about' ? 'About the same as' : word[0].toUpperCase() + word.slice(1)} the typical SSEN primary (${fmt(medianCml)} minutes). Each tick is another primary.</p>`));
+    text.push(`It had ${fmt(n)} high-voltage faults from ${A.years[0]} to ${A.years[1]}, costing about ${fmt(per)} minutes of supply per customer per year, ${word} the typical SSEN primary (${fmt(medianCml)}). Biggest cause: ${esc(lowerFirst(String(a.f.top)))}.`);
+  }
 
-  // 4. storms, from entry 02
+  // storms, from entry 02
   const d = a.dist && A.districts[a.dist], dn = a.dist && DISTRICT[a.dist.split('/').slice(1).join('/')];
-  if (d) parts.push(`<h2>When storms come</h2><p>${esc(sub)} is in SSEN's ${esc(dn)} fault district. There, days with gusts of 50 mph or more bring about ${N(d.ratio, 1)} times the usual number of faults, from ${N(d.windyDays)} such days in ten years.${d.windyDays < 70 && d.without3 ? ` That rests on few windy days, and without its three worst it is about ${N(d.without3, 1)} times, so treat it as rough.` : ''}${d.windyDays > 250 ? ` Wind that strong is routine there, so the better measure is the district's own windiest days, which bring about ${N(d.own, 1)} times the usual faults.` : ''} <a href="02-wind-and-faults.html">Entry 02</a> has the full comparison.</p>`);
+  if (d) {
+    const routine = d.windyDays > 250, val = routine ? d.own : d.ratio, vals = Object.values(A.districts).map(x => routine ? x.own : x.ratio).filter(v => v != null);
+    cards.push(card(`Storm days in ${esc(dn)}`, `<p class="num">${fmt(val, 1)}<small>× the usual faults</small></p>${strip(vals, val, `${dn}: ${fmt(val, 1)} times; each tick is another district`, v => fmt(v, 0) + '×')}<p class="note">${routine ? `On its own windiest days. 50 mph is routine here (${fmt(d.windyDays)} days in ten years).` : `On days with 50 mph gusts (${fmt(d.windyDays)} in ten years).`}${d.windyDays < 70 && d.without3 ? ` Rough: about ${fmt(d.without3, 1)}× without its 3 worst days.` : ''} <a href="02-wind-and-faults.html">Entry 02</a></p>`));
+    text.push(`In the ${esc(dn)} fault district, ${routine ? `its own windiest days bring about ${fmt(d.own, 1)} times the usual faults` : `days with 50 mph gusts bring about ${fmt(d.ratio, 1)} times the usual faults`}.`);
+  }
 
-  // 5. low-carbon technology now
-  if (a.lct) parts.push(`<h2>What people have connected</h2><p>Among its ${N(a.lct.customers)} customers, SSEN counts ${N(a.lct.ev)} electric vehicle chargers, ${N(a.lct.hp)} heat pumps, ${N(a.lct.pv)} solar installations${a.lct.battery ? ` and ${N(a.lct.battery)} home batteries, some fitted alongside the solar` : ''}. That is about ${N(a.lct.ev / a.lct.customers * 100, 1)} chargers and ${N(a.lct.hp / a.lct.customers * 100, 1)} heat pumps per 100 customers.</p>`);
+  // low-carbon technology
+  if (a.lct) {
+    const c = a.lct.customers, per = v => v / c * 100;
+    cards.push(card('Per 100 customers today', `<div class="lct">${[['EV chargers', a.lct.ev, '--s1'], ['Heat pumps', a.lct.hp, '--s2'], ['Solar', a.lct.pv, '--warn']].map(([l, v, col]) => `<div><p class="num">${fmt(per(v), 1)}</p>${grid100(per(v), col)}<p class="note">${l}</p></div>`).join('')}</div>`, true));
+    text.push(`Per 100 customers: ${fmt(per(a.lct.ev), 1)} EV chargers, ${fmt(per(a.lct.hp), 1)} heat pumps, ${fmt(per(a.lct.pv), 1)} solar installations.`);
+  }
 
-  // 6. looking ahead, from entry 04
+  // looking ahead, from entry 04
   const ro = a.r04;
-  if (ro) parts.push(`<h2>Looking ahead</h2><p>${ro.h > 0
-    ? (ro.def ? `If heat pumps, electric cars and new homes grow as in SSEN's Holistic Transition scenario, the spare demand capacity at ${esc(sub)} would be used up around <b class="n">${yr(ro.def)}</b>${ro.managed !== ro.unmanaged ? `: ${ro.managed ? `<b class="n">${yr(ro.managed)}</b>` : 'after 2040'} if cars charge at quiet times, ${ro.unmanaged ? `<b class="n">${yr(ro.unmanaged)}</b>` : 'after 2040'} if they all charge at the evening peak` : ''}.` : `On SSEN's Holistic Transition projections, ${esc(sub)} would still have spare demand capacity in 2040${ro.unmanaged ? `, unless cars all charge at the evening peak, in which case it would run out around <b class="n">${yr(ro.unmanaged)}</b>` : ''}.`)
-    : `${esc(sub)} has no spare demand capacity today, so new heat pumps, chargers and homes here depend on reinforcement, flexibility contracts or curtailable connections.`} ${ro.h > 0 ? '<a href="04-headroom-runout.html">Entry 04</a> explains the assumptions, which matter a great deal.' : '<a href="04-headroom-runout.html">Entry 04</a> looks at why so many substations are in this position.'}</p>`);
+  if (ro) {
+    if (ro.h > 0) {
+      cards.push(card('When spare demand capacity runs out', `<p class="num">${ro.def ? yr(ro.def) : 'after 2040'}</p>${timeline(ro.def, ro.managed, ro.unmanaged)}<p class="note">If heat pumps, EVs and new homes grow as SSEN's Holistic Transition scenario projects. The band spans cars charging at quiet times to all at the evening peak. <a href="04-headroom-runout.html">Entry 04</a></p>`, true));
+      text.push(ro.def ? `On SSEN's Holistic Transition projections, spare demand capacity runs out around ${yr(ro.def)} (${ro.managed ? yr(ro.managed) : 'after 2040'} with managed charging, ${ro.unmanaged ? yr(ro.unmanaged) : 'after 2040'} without).` : 'On SSEN\'s Holistic Transition projections, spare demand capacity lasts beyond 2040.');
+    } else {
+      cards.push(card('When spare demand capacity runs out', `<p class="num">Already full</p><p class="note">New heat pumps, chargers and homes depend on upgrades, flexibility contracts or curtailable connections. <a href="04-headroom-runout.html">Entry 04</a></p>`, true));
+      text.push('It has no spare demand capacity today.');
+    }
+  }
 
-  // 7. right now (live)
+  // right now (live)
   const out = r.result.outcode || pc.split(' ')[0], live = outages.filter(o => String(o.postcode || '').replace(/\s+/g, '').startsWith(out.replace(/\s+/g, '')) && !o.date_time_of_restoration && !/completed/i.test(o.status || ''));
   const reg = carbon?.find(x => x.regionid === (a.a === 'SEPD' ? 12 : 1));
-  parts.push(`<h2>Right now</h2><p>${live.length ? `SSEN is reporting ${N(live.length)} unrestored ${live.length === 1 ? 'outage' : 'outages'} in the ${esc(out)} postcode district.` : `SSEN is reporting no unrestored outages in the ${esc(out)} postcode district.`}${reg ? ` Electricity in ${esc(reg.shortname)} is running at about ${N(reg.intensity.forecast)} grams of CO₂ per kWh, which the national system operator rates ${esc(reg.intensity.index)}.` : ''}</p>`);
+  cards.push(card('Right now', `<div class="now"><div><p class="num">${live.length}</p><p class="note">unrestored ${live.length === 1 ? 'outage' : 'outages'} in ${esc(out)}</p></div>${reg ? `<div><p class="num">${fmt(reg.intensity.forecast)}<small> gCO₂/kWh</small></p>${chip(CI_RAG[reg.intensity.index], esc(reg.intensity.index))}<p class="note">carbon intensity, ${esc(reg.shortname)}</p></div>` : ''}</div>`));
+  text.push(`Right now SSEN reports ${live.length} unrestored ${live.length === 1 ? 'outage' : 'outages'} in ${esc(out)}${reg ? `, and electricity in ${esc(reg.shortname)} is running at ${fmt(reg.intensity.forecast)} gCO₂/kWh (${esc(reg.intensity.index)})` : ''}.`);
 
-  story.innerHTML = parts.join('');
+  story.innerHTML = head1 + `<div class="cards">${layoutCards(cards)}</div><details class="astext"><summary>Read it as text</summary>${text.map(t => `<p>${t}</p>`).join('')}</details>`;
 }
 
 async function start() {
