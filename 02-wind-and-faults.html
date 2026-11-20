@@ -54,7 +54,7 @@ function render(R) {
     <p>At about 50 mph. Below 40 mph wind makes almost no difference; above 50 mph the fault rate climbs steeply, to ${N(top.ratio, 0)} times the calm-day rate at 70 mph and over. Days that windy are ${pct(R.share.days, 1)} of the record but carry ${pct(R.share.faults)} of the faults and ${pct(R.share.cml)} of the customer-minutes lost.</p>
   </div>
   <p>Which places are most sensitive is less certain. Mainland north-east Scotland comes out highest, with faults rising ${N(most.ratio, 0)}-fold in ${esc(name(most.key))} and ${N(second.ratio, 0)}-fold in ${esc(name(second.key))} on 50 mph days. But those districts had few such days, and Storm Arwen alone produced ${pct(most.worstShare)} of ${esc(name(most.key))}'s windy-day faults. Without its three worst days the figure falls to ${N(most.without3, 1)} times, in line with much of southern England.</p>
-  <p>The islands look tough at first, rising only ${islands.map(d => x1(d.ratio)).join(', ')} on 50 mph days. That is mostly because 50 mph is routine there. Measured against each district's own windiest 2% of days, Orkney, the Western Isles and Shetland rise ${islands.map(d => x1(d.own)).join(', ')}, close to the mainland middle of ${x1(ownMid)}.</p>
+  <p>The islands look tough at first, rising only ${islands.map(d => x1(d.ratio)).join(', ')} on 50 mph days. That is mostly because 50 mph is routine there. Measured against each district's own windiest 2% of days, Orkney, the Western Isles and Shetland rise ${islands.map(d => x1(d.own)).join(', ')}, close to the mainland middle of ${x1(ownMid)}. <a href="islands-wind.html">See this as an interactive chart</a>.</p>
 
   <h2>Fault rate by gust strength</h2>
   <figure>

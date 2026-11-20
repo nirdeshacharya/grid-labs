@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Wind curves data build</title>
+<!-- Builds data/v1-wind-curves.json for the "How unusual is the wind?" visual. Steps:
+     1. python3 analysis/fetch_wind.py        (writes analysis/cache/wind.json)
+     2. python3 -m http.server 5179           (from the repository root)
+     3. open http://localhost:5179/analysis/v1-run.html and save the JSON shown into data/v1-wind-curves.json
+     Uses the same fault records and exclusions as entry 02. -->
+<body style="font:13px ui-monospace,Menlo,monospace;white-space:pre-wrap;padding:16px">running…
+<script src="../lab.js"></script>
+<script>
+const HV = { SHEPD: '245d5825-7d83-4d17-a2c5-04b473b9b408', SEPD: 'f0d9d3fe-6739-4700-a699-f227b4e1de41' };
+const FIELDS = ['DISTRICT_SHORT_CODE', 'HV_INCIDENT_TIME', 'CAUSE_CODE'];
+const PLANNED_CAUSES = new Set(['75', '86']);   // same exclusion as entry 02
+// Two ways to group a district's days. Both are compared with the same baseline: that district's calmer half of days.
+const MPH = [0, 20, 30, 40, 50, 60, 70, 80, Infinity];
+// Percentiles of each district's own daily maximum gust. 96.7 is about one day a month, 99 about four days a year, 99.73 about one a year.
+const PCT = [0, 50, 75, 90, 96.7, 99, 99.73, 100];
+const MIN_DAYS = 8;   // points resting on fewer district-days than this are dropped as too noisy
+const r3 = x => x == null || !Number.isFinite(x) ? null : +x.toPrecision(3);
+
+async function run() {
+  const wind = await getJSON('cache/wind.json');
+  const dayIx = new Map(wind.days.map((d, i) => [d, i])), nDays = wind.days.length, keys = Object.keys(wind.gust);
+  const [n, s] = await Promise.all([fetchAll(HV.SHEPD, FIELDS), fetchAll(HV.SEPD, FIELDS)]);
+  const f = Object.fromEntries(keys.map(k => [k, new Uint16Array(nDays)]));
+  for (const [area, rows] of [['SHEPD', n], ['SEPD', s]]) for (const r of rows) {
+    const d = f[area + '/' + r.DISTRICT_SHORT_CODE], i = dayIx.get(String(r.HV_INCIDENT_TIME).slice(0, 10));
+    if (d && i != null && !PLANNED_CAUSES.has(String(r.CAUSE_CODE))) d[i]++;
+  }
+  const districts = keys.map(k => {
+    const g = wind.gust[k], ix = [...Array(nDays).keys()].filter(i => g[i] != null), sorted = ix.map(i => g[i]).sort((a, b) => a - b);
+    const pctVal = p => p >= 100 ? Infinity : sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p / 100))];
+    const median = pctVal(50), calm = ix.filter(i => g[i] < median), base = calm.reduce((a, i) => a + f[k][i], 0) / calm.length;
+    const curve = edges => edges.slice(0, -1).map((lo, b) => {
+      const sel = ix.filter(i => g[i] >= lo && g[i] < edges[b + 1]);
+      return sel.length >= MIN_DAYS ? { days: sel.length, rate: r3(sel.reduce((a, i) => a + f[k][i], 0) / sel.length / base) } : { days: sel.length, rate: null };
+    });
+    const pctEdges = PCT.map(pctVal); pctEdges[0] = -Infinity;
+    return { key: k, baseRate: r3(base), median: r3(median), gustsAtPct: PCT.slice(1, -1).map(p => r3(pctVal(p))), mph: curve(MPH), pct: curve(pctEdges) };
+  });
+  return { computed: new Date().toISOString(), period: [wind.days[0], wind.days.at(-1)], mphEdges: MPH.map(v => Number.isFinite(v) ? v : null), pctEdges: PCT, minDays: MIN_DAYS, districts };
+}
+run().then(r => { window._result = r; document.body.textContent = JSON.stringify(r); }).catch(e => { window._error = String(e); document.body.textContent = 'failed: ' + e; });
+</script>

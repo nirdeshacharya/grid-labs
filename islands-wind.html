@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tougher islands, or windier ones? · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .viz { margin: 8px 0 6px; }
+  .viz svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+  .viz .grid line { stroke: var(--rule); stroke-width: 1; }
+  .viz .grid line.one { stroke: var(--ink-3); stroke-dasharray: 3 3; }
+  .viz text { font: 11px var(--mono); fill: var(--ink-3); }
+  .viz text.title { font: 12px var(--sans); fill: var(--ink-2); }
+  .viz .ln { fill: none; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; transition: opacity .2s; }
+  .viz .ln.other { stroke: var(--na); opacity: .55; }
+  .viz .ln.island { stroke: var(--s2); stroke-width: 2.4; }
+  .viz .ln.northeast { stroke: var(--s1); stroke-width: 2.4; }
+  .viz .ln.faded { opacity: .12; }
+  .viz .ln.on { opacity: 1; stroke-width: 3.2; }
+  .viz .hit { fill: none; stroke: transparent; stroke-width: 12; cursor: pointer; }
+  .viz .dot { stroke: var(--panel); stroke-width: 1.5; }
+  .viz .tag { font: 600 12px var(--sans); }
+  .toggle { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0 8px; }
+  .toggle .seg button { font-size: 14px; padding: 7px 14px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 0 0 6px; }
+  .chips button { font: inherit; font-size: 13px; color: var(--ink-2); background: none; border: 1px solid var(--rule); border-radius: 2px; padding: 3px 10px; cursor: pointer; }
+  .chips button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+  .chips .sw { display: inline-block; width: 14px; height: 3px; vertical-align: 3px; margin-right: 6px; }
+  .chips select { font: inherit; font-size: 13px; color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 2px; padding: 3px 6px; }
+  .caption { min-height: 4.8em; font-size: 16px; margin: 6px 0 0; max-width: 66ch; }
+  .readout { font-size: 14px; color: var(--ink-2); min-height: 1.6em; margin: 4px 0 0; }
+  @media (prefers-reduced-motion: reduce) { .viz .ln { transition: none; } }
+</style>
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a> · <a href="https://nirdeshacharya.github.io/grid-lens/">Grid Lens</a></nav></div></header>
+<main>
+  <div class="entry">Visual · from entry 02 <span class="small">· posted 20 November 2026</span></div>
+  <h1>Are the islands tougher, or just windier?</h1>
+  <p class="lede">Each line is one of SSEN's 31 fault-reporting districts: how many faults it has on a day, compared with its calmer days, as the wind rises. Switch how the wind is measured and watch where the islands go.</p>
+
+  <div class="toggle"><span class="small">Measure the wind by</span>
+    <div class="seg" id="mode"><button aria-pressed="true" data-m="mph">Speed, in mph</button><button aria-pressed="false" data-m="pct">How unusual it is there</button></div></div>
+  <p class="caption" id="caption" aria-live="polite"></p>
+  <div class="chips" id="chips"></div>
+  <figure class="viz"><svg id="chart" viewBox="0 0 760 440" preserveAspectRatio="xMinYMin meet" role="img" aria-labelledby="caption"></svg></figure>
+  <p class="readout" id="readout">Hover or tap a line to see which district it is.</p>
+
+  <h2>How to read it</h2>
+  <p>The height of a line is a district's faults per day on days with that wind, divided by its faults per day on its calmer half of days. So 1× is a normal day for that place and 10× is ten times as many faults. The scale is logarithmic, so each step up is a multiplication.</p>
+  <p>In mph, every district shares the same scale. The other view ranks each district's days against its own ten years of weather: the far right is roughly the windiest day of an average year there, whatever speed that is. On Orkney that is about 80 mph; in Reading it is under 60.</p>
+
+  <h2>What it shows</h2>
+  <p id="shows"></p>
+  <p>This is the finding from <a href="02-wind-and-faults.html">entry 02</a>, which has the method, robustness checks and limits in full. The one that matters most here: each district gets one weather point, so the wind it records is a smoothed estimate, and large northern districts will have seen stronger gusts than the lines suggest.</p>
+
+  <h2>Data</h2>
+  <p class="small" id="data"></p>
+  <footer>Part of <a href="./">Grid Labs</a>. Not affiliated with SSEN. This shows a statistical association in published records, not an engineering assessment of any circuit.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+const DISTRICT = { 'N/EAST': 'North East Scotland', HIGH: 'Highland', TAYCEN: 'Tayside and Central', ARGYLL: 'Argyll and West Highland', SHET: 'Shetland', WISLES: 'Western Isles', ORKN: 'Orkney',
+  POOL: 'Poole', MELK: 'Melksham', OXFN: 'Oxford North', SWIN: 'Swindon', OXFS: 'Oxford South', NEWF: 'New Forest', PETE: 'Petersfield', BASI: 'Basingstoke', REAN: 'Reading North', ALDE: 'Aldershot',
+  REAS: 'Reading South', CHIC: 'Chichester', SALI: 'Salisbury', SLOU: 'Slough', YEOV: 'Yeovil', NEWB: 'Newbury', BOUR: 'Bournemouth', BRAC: 'Bracknell', ANDO: 'Andover', PORT: 'Portsmouth',
+  ISLE: 'Isle of Wight', SOTN: 'Southampton', WLON: 'West London', EGHA: 'Egham' };
+const ISLANDS = new Set(['SHEPD/SHET', 'SHEPD/WISLES', 'SHEPD/ORKN']), NORTHEAST = new Set(['SHEPD/TAYCEN', 'SHEPD/N/EAST']);
+const GROUPS = [['island', 'Orkney, Shetland, Western Isles', '--s2'], ['northeast', 'Tayside and North East Scotland', '--s1'], ['other', 'Everywhere else', '--na']];
+const name = k => DISTRICT[k.split('/').slice(1).join('/')] || k;
+const groupOf = k => ISLANDS.has(k) ? 'island' : NORTHEAST.has(k) ? 'northeast' : 'other';
+const x1 = v => v == null ? 'n/a' : fmt(v, v < 10 ? 1 : 0) + '×';
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// geometry
+// The chart is drawn at the width it is shown, so text stays a readable size on phones.
+let W = 760, H = 440, L = 58, R = 120, T = 14, B = 62, PW = W - L - R, PH = H - T - B, small = false;
+function layout() { W = Math.max(300, Math.round($('.viz').clientWidth || 760)); small = W < 560; L = small ? 40 : 58; R = small ? 104 : 120; H = small ? 380 : 440; B = small ? 52 : 62; PW = W - L - R; PH = H - T - B; $('#chart').setAttribute('viewBox', `0 0 ${W} ${H}`); }
+const YMIN = 0.5, YMAX = 50, y = v => T + (Math.log(YMAX) - Math.log(Math.max(YMIN, Math.min(YMAX, v)))) / (Math.log(YMAX) - Math.log(YMIN)) * PH;
+const MPH_MID = [12, 25, 35, 45, 55, 65, 75, 85], xMph = v => L + (v - 8) / (90 - 8) * PW;
+const xPct = i => L + i / 7 * PW;   // seven equal-width bands between eight percentile edges
+const PCT_TICKS = [[1, 'every 2nd day'], [2, '1 day in 4'], [3, '1 in 10'], [4, 'monthly'], [5, '4 a year'], [6, 'yearly']];
+
+let D, mode = 'mph', focus = null, group = null, shapes = {};
+const SAMPLES = 60;
+
+function points(d, m) {
+  const src = m === 'mph' ? d.mph.map((p, i) => [xMph(MPH_MID[i]), p.rate]) : d.pct.map((p, i) => [xPct(i + .5), p.rate]);
+  return src.filter(([, r]) => r != null).map(([px, r]) => [px, y(r)]);
+}
+// resample a polyline at evenly spaced x positions so the two views can morph into each other
+function resample(pts) {
+  if (pts.length < 2) return null;
+  const out = [], x0 = pts[0][0], xN = pts.at(-1)[0];
+  for (let s = 0; s < SAMPLES; s++) {
+    const px = x0 + (xN - x0) * s / (SAMPLES - 1);
+    let j = 0; while (j < pts.length - 2 && pts[j + 1][0] < px) j++;
+    const [ax, ay] = pts[j], [bx, by] = pts[j + 1], t = bx === ax ? 0 : (px - ax) / (bx - ax);
+    out.push([px, ay + (by - ay) * Math.max(0, Math.min(1, t))]);
+  }
+  return out;
+}
+const pathOf = pts => pts ? 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') : '';
+
+function axes(m) {
+  const yt = [0.5, 1, 2, 5, 10, 20, 50];
+  let s = `<g class="grid">${yt.map(v => `<line class="${v === 1 ? 'one' : ''}" x1="${L}" x2="${L + PW}" y1="${y(v)}" y2="${y(v)}"/>`).join('')}</g>`;
+  s += yt.map(v => `<text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${v}×</text>`).join('');
+  s += `<text class="title" x="${L}" y="${H - 6}">${m === 'mph' ? 'Strongest gust that day, mph →' : small ? 'How often wind this strong happens there →' : 'How often wind this strong happens in that district →'}</text>`;
+  if (m === 'mph') s += (small ? [20, 40, 60, 80] : [20, 30, 40, 50, 60, 70, 80]).map(v => `<text x="${xMph(v)}" y="${T + PH + 18}" text-anchor="middle">${v}</text>`).join('');
+  // labels sit on the band edges; on wide screens they alternate between two rows so they never overlap
+  else s += PCT_TICKS.filter(([i]) => !small || [1, 4, 6].includes(i)).map(([i, l]) => `<line x1="${xPct(i)}" x2="${xPct(i)}" y1="${T + PH}" y2="${T + PH + (small || i % 2 ? 6 : 20)}" style="stroke:var(--rule)"/><text x="${xPct(i)}" y="${T + PH + (small || i % 2 ? 18 : 32)}" text-anchor="middle">${l}</text>`).join('');
+  return s;
+}
+
+function draw(m) {
+  const svg = $('#chart'), order = [...D.districts].sort((a, b) => ({ other: 0, northeast: 1, island: 2 })[groupOf(a.key)] - ({ other: 0, northeast: 1, island: 2 })[groupOf(b.key)]);
+  svg.innerHTML = `<g id="ax">${axes(m)}</g><g id="lines">${order.map(d => `<path class="ln ${groupOf(d.key)}" data-k="${d.key}"/>`).join('')}</g><g id="hits">${order.map(d => `<path class="hit" data-k="${d.key}"/>`).join('')}</g><g id="tags"></g><g id="dots"></g>`;
+  for (const d of D.districts) shapes[d.key] = resample(points(d, m));
+  paint();
+}
+function paint() {
+  for (const el of document.querySelectorAll('#lines .ln, #hits .hit')) el.setAttribute('d', pathOf(shapes[el.dataset.k]));
+  for (const el of document.querySelectorAll('#lines .ln')) {
+    const k = el.dataset.k, g = groupOf(k);
+    el.classList.toggle('on', focus === k);
+    el.classList.toggle('faded', (focus && focus !== k) || (!focus && group && group !== g));
+  }
+  // end labels for the highlighted groups
+  const tagged = D.districts.filter(d => focus ? d.key === focus : groupOf(d.key) !== 'other' && (!group || group === groupOf(d.key)));
+  const ends = tagged.map(d => ({ d, p: shapes[d.key]?.at(-1) })).filter(e => e.p).sort((a, b) => a.p[1] - b.p[1]);
+  let last = -99; for (const e of ends) { e.ty = Math.max(e.p[1], last + 14); last = e.ty; }
+  $('#tags').innerHTML = ends.map(e => `<text class="tag" x="${e.p[0] + 6}" y="${e.ty + 4}" style="fill:var(${groupOf(e.d.key) === 'island' ? '--s2' : groupOf(e.d.key) === 'northeast' ? '--s1' : '--ink-2'})">${esc(name(e.d.key))}</text>`).join('');
+  // dots at the real data points of the focused district
+  const fd = focus && D.districts.find(d => d.key === focus);
+  $('#dots').innerHTML = fd ? points(fd, mode).map(([px, py]) => `<circle class="dot" cx="${px}" cy="${py}" r="4" style="fill:var(${groupOf(focus) === 'island' ? '--s2' : groupOf(focus) === 'northeast' ? '--s1' : '--ink-2'})"/>`).join('') : '';
+}
+
+function morph(to) {
+  const from = shapes, target = {};
+  for (const d of D.districts) target[d.key] = resample(points(d, to));
+  $('#ax').innerHTML = axes(to);
+  if (reduce) { shapes = target; paint(); return; }
+  const t0 = performance.now(), dur = 900;
+  const step = now => {
+    const t = Math.min(1, (now - t0) / dur), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    shapes = {};
+    for (const k in target) shapes[k] = target[k] && from[k] ? target[k].map((p, i) => [from[k][i][0] + (p[0] - from[k][i][0]) * e, from[k][i][1] + (p[1] - from[k][i][1]) * e]) : target[k];
+    paint();
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function caption() {
+  const isl = D.districts.filter(d => ISLANDS.has(d.key)), ne = D.districts.filter(d => NORTHEAST.has(d.key));
+  const rest = D.districts.filter(d => groupOf(d.key) === 'other').map(d => d.pct.at(-1).rate).filter(v => v != null).sort((a, b) => a - b);
+  const mid = rest[Math.floor(rest.length / 2)];
+  const at = (d, i) => d.mph[i].rate;   // index 5 is 60 to 70 mph
+  const list = (ds, f) => { const p = ds.map(d => `${name(d.key)} ${x1(f(d))}`); return p.slice(0, -1).join(', ') + ' and ' + p.at(-1); };
+  $('#caption').innerHTML = mode === 'mph'
+    ? `Measured in mph, the orange island lines stay low until about 70 mph: at 60 to 70 mph, ${list(isl, d => at(d, 5))}. North-east Scotland, in blue, is already far higher by 50 to 60 mph. On this view the islands look much tougher.`
+    : `Measured against each place's own weather, the island lines climb with the rest. On roughly the windiest day of a year: ${list(isl, d => d.pct.at(-1).rate)}, against a middle of ${x1(mid)} for the other districts. The islands get 50 mph winds so often that 50 mph is an ordinary day there.`;
+}
+function readout(k) {
+  if (!k) { $('#readout').textContent = 'Hover or tap a line to see which district it is.'; return; }
+  const d = D.districts.find(x => x.key === k);
+  $('#readout').textContent = `${name(k)}: a typical day's strongest gust is ${fmt(d.median)} mph, and about once a year it reaches ${fmt(d.gustsAtPct.at(-1))} mph. On those days it has ${x1(d.pct.at(-1).rate)} its calm-day faults.`;
+}
+
+function setup() {
+  $('#chips').innerHTML = GROUPS.map(([g, l, c]) => `<button aria-pressed="false" data-g="${g}"><span class="sw" style="background:var(${c})"></span>${l}</button>`).join('')
+    + `<select id="pick" aria-label="Find a district"><option value="">Find a district…</option>${[...D.districts].sort((a, b) => name(a.key).localeCompare(name(b.key))).map(d => `<option value="${d.key}">${esc(name(d.key))}</option>`).join('')}</select>`;
+  layout(); draw(mode); caption();
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { layout(); draw(mode); }, 150); });
+  $('#mode').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || b.dataset.m === mode) return;
+    mode = b.dataset.m; for (const x of document.querySelectorAll('#mode button')) x.setAttribute('aria-pressed', x === b);
+    caption(); morph(mode); if (focus) readout(focus);
+  });
+  $('#chips').addEventListener('click', e => {
+    const b = e.target.closest('button[data-g]'); if (!b) return;
+    group = group === b.dataset.g ? null : b.dataset.g; focus = null; $('#pick').value = ''; readout(null);
+    for (const x of document.querySelectorAll('#chips button')) x.setAttribute('aria-pressed', x.dataset.g === group);
+    paint();
+  });
+  $('#pick').addEventListener('change', e => { focus = e.target.value || null; group = null; for (const x of document.querySelectorAll('#chips button')) x.setAttribute('aria-pressed', false); readout(focus); paint(); });
+  const hits = $('#chart');
+  hits.addEventListener('pointerover', e => { const k = e.target.dataset?.k; if (k && e.target.classList.contains('hit')) { focus = k; readout(k); paint(); } });
+  hits.addEventListener('pointerleave', () => { if (!$('#pick').value) { focus = null; readout(null); paint(); } });
+  hits.addEventListener('click', e => { const k = e.target.dataset?.k; if (k) { focus = k; $('#pick').value = k; readout(k); paint(); } });
+
+  const isl = D.districts.filter(d => ISLANDS.has(d.key));
+  const rest = D.districts.filter(d => groupOf(d.key) === 'other').map(d => d.pct.at(-1).rate).filter(v => v != null).sort((a, b) => a - b), mid = rest[Math.floor(rest.length / 2)];
+  const low = isl.filter(d => d.pct.at(-1).rate < mid * 0.6);
+  $('#shows').textContent = `Wind speed alone makes the islands look resilient, because their networks see 50 mph so often that it barely registers. Judged against their own weather, ${low.length ? `${isl.filter(d => !low.includes(d)).map(d => name(d.key)).join(' and ')} respond much like the mainland, and ${low.map(d => name(d.key)).join(' and ')} somewhat less` : 'they respond much like the mainland'}. So the island networks are not clearly tougher. What hurts a network most is wind that is unusual for that place.`;
+  $('#data').innerHTML = `High-voltage fault records from SSEN's NaFIRS datasets for both licence areas, ${esc(D.period[0].slice(0, 4))} to ${esc(D.period[1].slice(0, 4))}, with planned work removed as in entry 02. Daily maximum gusts from the <a href="https://open-meteo.com">Open-Meteo</a> historical weather API, one point per district. Points resting on fewer than ${D.minDays} days are left out, which is why some mph lines stop early. Built ${day(D.computed)} by <span class="n">analysis/v1-run.html</span>; data in <a href="data/v1-wind-curves.json">data/v1-wind-curves.json</a>.`;
+}
+getJSON('data/v1-wind-curves.json').then(d => { D = d; setup(); }).catch(e => { $('#caption').innerHTML = `<span class="err">The data could not be loaded: ${esc(e.message)}.</span>`; });
+</script>
+</body>
+</html>
