@@ -25,10 +25,11 @@
   .kicker { font: 500 13px var(--mono); color: var(--ink-3); margin: 0 0 4px; }
   .big { font: 600 26px/1.25 var(--cond); margin: 0 0 14px; max-width: none; }
   .chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
-  .chain span { position: relative; font-size: 14px; font-weight: 500; background: var(--fill); border-radius: 2px; padding: 6px 10px; }
-  .chain span + span::before { content: "→"; position: absolute; left: -11px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--ink-3); }
-  .chain span.me { background: var(--ink); color: var(--panel); }
-  .chain span.you { background: var(--signal); color: #15211e; }
+  .chain > span { position: relative; font-size: 14px; font-weight: 500; background: var(--fill); border-radius: 2px; padding: 6px 10px; }
+  .chain > span + span::before { content: "→"; position: absolute; left: -11px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--ink-3); }
+  .chain > span.me { background: var(--ink); color: var(--panel); }
+  .chain > span.me .term { text-decoration-color: currentColor; }
+  .chain > span.you { background: var(--signal); color: #15211e; }
   .chain small { display: block; font-size: 11.5px; font-weight: 400; opacity: .75; }
   .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; padding: 14px 16px 12px; min-width: 0; }
@@ -61,6 +62,20 @@
   .tl b { position: absolute; top: 3px; width: 4px; height: 20px; margin-left: -2px; background: var(--ink); border-radius: 1px; }
   .tlx { position: absolute; top: 26px; left: 0; right: 0; display: flex; justify-content: space-between; font: 10px var(--mono); color: var(--ink-3); }
   .now { display: flex; gap: 24px; flex-wrap: wrap; }
+  .chain > span.tx { background: none; border: 1px dashed var(--ink-3); }
+  .term { text-decoration: underline dotted var(--ink-3); text-underline-offset: 3px; cursor: help; }
+  .term:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+  .h3t { font: inherit; text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 4px; }
+  .mix { display: flex; gap: 2px; height: 18px; margin: 4px 0 8px; border-radius: 2px; overflow: hidden; }
+  .mix i { display: block; min-width: 2px; }
+  .terms { margin-top: 18px; border: 1px solid var(--rule); border-radius: 3px; padding: 10px 14px; background: var(--panel); }
+  .terms summary { cursor: pointer; font-weight: 600; font-size: 15px; }
+  .terms dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; margin: 12px 0 4px; }
+  @media (max-width: 560px) { .terms dl { grid-template-columns: 1fr; } }
+  .terms dt { font-weight: 600; font-size: 14px; }
+  .terms dd { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-2); }
+  .terms div { border-radius: 2px; padding: 4px 6px; margin: -4px -6px; transition: background .6s; }
+  .terms div.flash { background: color-mix(in srgb, var(--signal) 30%, transparent); }
   .astext { margin-top: 18px; }
   .astext summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
   .astext p { font-size: 15px; }
@@ -78,7 +93,7 @@
   <div class="story" id="story" aria-live="polite"><p class="loading">Loading SSEN's network data…</p></div>
 
   <h2>Where this comes from</h2>
-  <p class="small" id="sources">Your postcode is sent to postcodes.io to find where it is, and nothing is stored. The substation that serves it comes from SSEN's primary supply-area boundaries, simplified to about 100 m, so a postcode right on a boundary can land in the neighbouring area. Headroom, generation and live outages are fetched from SSEN as the page loads. The fault record, storm sensitivity, low-carbon counts and the look ahead come from <a href="02-wind-and-faults.html">entry 02</a>, <a href="04-headroom-runout.html">entry 04</a> and SSEN's datasets as built on the date below.</p>
+  <p class="small" id="sources">Your postcode is sent to postcodes.io to find where it is, and nothing is stored. The substation that serves it comes from SSEN's primary supply-area boundaries, simplified to about 100 m, so a postcode right on a boundary can land in the neighbouring area. Headroom, generation and live outages are fetched from SSEN as the page loads. The generation mix and carbon intensity come from NESO's Carbon Intensity API, and each grid supply point's transmission code from NESO's grid supply point lookup. The transmission owner and voltage come from the grid supply point's transformer ratio in SSEN's headroom file. The fault record, storm sensitivity, low-carbon counts and the look ahead come from <a href="02-wind-and-faults.html">entry 02</a>, <a href="04-headroom-runout.html">entry 04</a> and SSEN's datasets as built on the date below.</p>
   <footer>Part of <a href="./">Grid Labs</a>. Not affiliated with SSEN. This is a summary of published data, not advice on connecting anything to the network.</footer>
 </main>
 <script src="lab.js"></script>
@@ -97,7 +112,14 @@ const Q = 1e4;
 const yr = v => String(v);   // years without a thousands separator
 // SSEN's cause labels mix capitals; lower-case them but keep acronyms such as PESC and the name National Grid
 const lowerFirst = s => s.split(' ').map(w => /^[A-Z]{2,}$/.test(w) ? w : w.toLowerCase()).join(' ').replace(/national grid/g, 'National Grid');
-let A, head, outages, carbon, medianCml;
+let A, head, outages, carbon, medianCml, neso = [];
+// NESO's grid supply point lookup gives each GSP's code on the transmission system, such as COWL_1 for Cowley
+const nesoKey = s => String(s || '').toUpperCase().replace(/\b(GSP|GRID)\b/g, '').replace(/[^A-Z]/g, '');
+function nesoGsp(name) {
+  const k = nesoKey(name), k2 = k.replace(/\d+$/, '');
+  const rows = neso.filter(r => nesoKey(r.region_name) === k || nesoKey(r.region_name) === k2);
+  return rows.length ? [...new Set(rows.map(r => r.gsp_name))].join(', ') : null;
+}
 
 // ---- geometry ----
 const decode = enc => { const pts = []; let x = 0, y = 0; for (let i = 0; i < enc.length; i += 2) { x += enc[i]; y += enc[i + 1]; pts.push([x / Q, y / Q]); } return pts; };
@@ -135,6 +157,27 @@ function headroomFor(a) {
 // ---- small visual pieces ----
 const chip = (s, label) => RAG[s] ? `<span class="chip" style="--c:var(${RAG[s][0]})"><i>${RAG[s][1]}</i>${label || RAG[s][2]}</span>` : '<span class="chip">no status</span>';
 const CI_RAG = { 'very low': 'Green', low: 'Green', moderate: 'Amber', high: 'Red', 'very high': 'Red' };
+// Short explanations of the main terms. Only the ones a reader is likely to stumble on.
+const TERMS = {
+  tx: ['Transmission network', 'The national high-voltage grid that carries power long distances from large power stations and wind farms. It runs at 400 kV and 275 kV, and in the north of Scotland at 132 kV as well.'],
+  gsp: ['Grid supply point', 'Where the transmission network hands power to SSEN\'s local network, through large transformers that step the voltage down.'],
+  bsp: ['Bulk supply point', 'A substation that steps 132 kV down to 33 kV for a wider area. Common in southern England; in the north of Scotland most primaries are fed straight from a grid supply point.'],
+  primary: ['Primary substation', 'Steps 33 kV down to 11 kV for the streets around it, usually serving a few thousand to tens of thousands of customers. Small local substations then bring it down to the 230 V in your sockets.'],
+  kv: ['kV (kilovolts)', 'A measure of voltage. 1 kV is 1,000 volts; a home socket is 230 V. Higher voltages move power further with smaller losses.'],
+  mw: ['MW (megawatts)', 'Real power, the part that does useful work such as heating or turning a motor. 1 MW is 1,000 kW; a kettle uses about 3 kW.'],
+  mva: ['MVA (megavolt-amperes)', 'The total load a transformer or cable carries, including power that surges back and forth without doing useful work. Equipment is rated in MVA because heat depends on the total current. MW = MVA × power factor, which on most networks is around 0.95, so 10 MVA carries roughly 9.5 MW. For a rough read, treat them as about the same.'],
+  headroom: ['Headroom', 'SSEN\'s estimate of how much more demand or generation a substation can take before it needs upgrading, after allowing for what is already connected or promised.'],
+  cml: ['Customer-minutes lost', 'Customers cut off multiplied by the minutes they were off. 100 homes off for 30 minutes is 3,000 customer-minutes.'],
+  co2: ['gCO₂/kWh', 'Grams of carbon dioxide released to produce one kilowatt-hour of electricity, about enough to run a kettle for 20 minutes.'],
+};
+const term = (k, text) => `<span class="term" tabindex="0" role="button" data-term="${k}" data-tip="${esc(TERMS[k][1])}">${text}</span>`;
+const glossary = () => `<details class="terms" id="terms"><summary>What MW, MVA and the other terms mean</summary><dl>${Object.entries(TERMS).map(([k, [l, d]]) => `<div id="term-${k}"><dt>${l}</dt><dd>${d}</dd></div>`).join('')}</dl></details>`;
+// NESO's regional generation mix, in a fixed order so colours stay the same between postcodes
+const MIX = [['wind', 'Wind', '--s1'], ['nuclear', 'Nuclear', '--violet'], ['solar', 'Solar', '--warn'], ['hydro', 'Hydro', '--aqua'], ['biomass', 'Biomass', '--good'], ['gas', 'Gas', '--s2'], ['coal', 'Coal', '--ink-2'], ['imports', 'Imports', '--na'], ['other', 'Other', '--rule']];
+function mixBar(reg) {
+  const by = Object.fromEntries(reg.generationmix.map(m => [m.fuel, m.perc])), parts = MIX.filter(([f]) => by[f] > 0.4);
+  return `<div class="mix" role="img" aria-label="Generation mix: ${parts.map(([f, l]) => `${l} ${fmt(by[f])}%`).join(', ')}">${parts.map(([f, l, c]) => `<i style="width:${by[f]}%;background:var(${c})" data-tip="${l}: ${fmt(by[f], 1)}%"></i>`).join('')}</div><div class="key">${parts.map(([f, l, c]) => `<span><span class="sq" style="background:var(${c})"></span>${l} ${fmt(by[f])}%</span>`).join('')}</div>`;
+}
 function columns(vals, first) {
   const max = Math.max(...vals, 1);
   return `<div class="cols" role="img" aria-label="Faults per year, ${first} to ${first + vals.length - 1}: ${vals.join(', ')}">${vals.map((v, i) => `<div data-tip="${first + i}: ${v} faults"><i style="height:${v / max * 100}%"></i><span>${String(first + i).slice(2)}</span></div>`).join('')}</div>`;
@@ -171,20 +214,32 @@ async function tell(pcRaw) {
   const a = hit.a, hr = headroomFor(a), sub = hr ? plain(hr.Substation) : titleCase(a.n);
   const bsp = hr && hr['Upstream BSP'] && hr['Upstream BSP'] !== 'N/A' ? plain(hr['Upstream BSP']) : null, gspName = hr ? plain(hr['Upstream GSP']) : null;
   const cards = [], text = [], order = [];
+  // the transmission side: who owns it and the voltage it arrives at, from the grid supply point's transformer ratio
+  const gRow = hr && head.find(x => x['Substation Type'] === 'GSP' && x.Substation === hr['Upstream GSP']);
+  const gspKv = gRow?.voltage__kv_ ? String(gRow.voltage__kv_).replace(/\s+/g, '') : null, txKv = gspKv ? Math.max(...gspKv.split('/').map(Number).filter(Number.isFinite)) : null;
+  const txOwner = a.a === 'SEPD' ? 'National Grid Electricity Transmission' : 'SSEN Transmission';
+  const node = gspName && nesoGsp(gspName);
 
   // header: where
   const head1 = `<div class="hero"><div>
       <p class="kicker">${esc(pc)}${approx ? ' (district centre)' : ''} · ${esc(town || '')}</p>
       <p class="big">Supplied from <b>${esc(sub)}</b>${hit.exact ? '' : ' (on the edge of its area)'}</p>
-      <div class="chain"><span>${esc(gspName || '?')}<small>grid supply point</small></span>${bsp ? `<span>${esc(bsp)}<small>bulk supply point</small></span>` : ''}<span class="me">${esc(sub)}<small>primary${a.lct ? `, ${fmt(a.lct.customers)} customers` : ''}</small></span><span class="you">${esc(pc)}<small>you</small></span></div>
+      <div class="chain"><span class="tx">${term('tx', 'Transmission network')}<small>${esc(txOwner)}${txKv ? `, ${txKv} ${term('kv', 'kV')}` : ''}</small></span><span>${esc(gspName || '?')}<small>${term('gsp', 'grid supply point')}${gspKv ? `, ${esc(gspKv)} kV` : ''}</small></span>${bsp ? `<span>${esc(bsp)}<small>${term('bsp', 'bulk supply point')}</small></span>` : ''}<span class="me">${esc(sub)}<small>${term('primary', 'primary')}${a.lct ? `, ${fmt(a.lct.customers)} customers` : ''}</small></span><span class="you">${esc(pc)}<small>you</small></span></div>
     </div><figure>${outline(a, lon, lat)}<figcaption class="small">The area ${esc(sub)} serves. The dot is ${esc(pc)}.</figcaption></figure></div>`;
   text.push(`${esc(pc)} is in ${esc(town || 'SSEN\'s area')}, in SSEN's ${a.a === 'SEPD' ? 'southern' : 'northern'} licence area, supplied from ${esc(sub)} primary substation${a.lct ? ` (about ${fmt(a.lct.customers)} customers)` : ''}${gspName ? `, fed through ${bsp ? esc(bsp) + ' bulk supply point and ' : ''}${esc(gspName)} grid supply point` : ''}.`);
+
+  // where the power comes from right now (NESO)
+  const regMix = carbon?.find(x => x.regionid === (a.a === 'SEPD' ? 12 : 1));
+  if (regMix) {
+    cards.push(card('Where the power comes from right now', `${mixBar(regMix)}<p class="note">The mix of generation feeding ${esc(regMix.shortname)} this half hour, as modelled by NESO, the national system operator. It reaches ${esc(gspName || 'the grid supply point')} over the ${term('tx', 'transmission network')}${txKv ? ` at ${txKv} kV` : ''}, owned here by ${esc(txOwner)}.${node ? ` NESO knows the connection as ${esc(node)}.` : ''}</p>`, true));
+    text.push(`Right now ${esc(regMix.shortname)} is supplied mostly by ${regMix.generationmix.filter(m => m.perc > 0).sort((x, y) => y.perc - x.perc).slice(0, 2).map(m => `${m.fuel} (${fmt(m.perc)}%)`).join(' and ')}, reaching ${esc(gspName || 'the grid supply point')} over ${esc(txOwner)}'s transmission network${txKv ? ` at ${txKv} kV` : ''}.`);
+  }
 
   // room on the network (live)
   if (hr) {
     const dh = num(hr.estimated_demand_headroom__mva_), gh = num(hr.estimated_generation_headroom__mw_), works = hr['Substation Reinforcement Works'] || hr['Upstream Reinforcement Works'], due = hr['Substation Reinforcement Completion Date'] || hr['Upstream Reinforcement Completion Date'];
-    cards.push(card('Room for new demand', `<p class="num">${dh > 0 ? fmt(dh, 1) : '0'}<small> MVA spare</small></p>${chip(hr['Substation Demand RAG Status'])}<p class="note">${dh > 0 ? 'Heat pumps, chargers and new homes can connect.' : 'Full. New load needs an upgrade or a flexible connection.'}${hr['Demand Constraint'] ? ` Limit: ${esc(hr['Demand Constraint'].toLowerCase())}.` : ''}</p>`));
-    cards.push(card('Room for new generation', `<p class="num">${gh > 0 ? fmt(gh, 1) : '0'}<small> MW spare</small></p>${chip(hr['Substation Generation RAG Status'])}<p class="note">${gh > 0 ? 'Solar and wind can still connect here.' : 'Full for new solar or wind.'}</p>`));
+    cards.push(card(`Room for new demand <span class="h3t">${term('headroom', 'headroom')}</span>`, `<p class="num">${dh > 0 ? fmt(dh, 1) : '0'}<small> ${term('mva', 'MVA')} spare</small></p>${chip(hr['Substation Demand RAG Status'])}<p class="note">${dh > 0 ? 'Heat pumps, chargers and new homes can connect.' : 'Full. New load needs an upgrade or a flexible connection.'}${hr['Demand Constraint'] ? ` Limit: ${esc(hr['Demand Constraint'].toLowerCase())}.` : ''}</p>`));
+    cards.push(card('Room for new generation', `<p class="num">${gh > 0 ? fmt(gh, 1) : '0'}<small> ${term('mw', 'MW')} spare</small></p>${chip(hr['Substation Generation RAG Status'])}<p class="note">${gh > 0 ? 'Solar and wind can still connect here.' : 'Full for new solar or wind.'}</p>`));
     if (works) cards.push(card('Upgrade planned', `<p class="num">${esc(due || 'date not given')}</p><p class="note">${esc(String(works).replace(/\s+/g, ' ').replace(/^Transmission works:\s*/i, 'Transmission works: ').slice(0, 160))}${String(works).length > 160 ? '…' : ''}</p>`, true));
     text.push(`Spare capacity: ${dh > 0 ? fmt(dh, 1) + ' MVA for demand' : 'none for new demand'} (${esc(hr['Substation Demand RAG Status'] || 'no status')}), ${gh > 0 ? fmt(gh, 1) + ' MW for generation' : 'none for new generation'} (${esc(hr['Substation Generation RAG Status'] || 'no status')}).${works ? ` Upgrade planned${due ? ' for ' + esc(due) : ''}: ${esc(String(works).replace(/\s+/g, ' '))}` : ' No upgrade listed.'}`);
     const g = head.find(x => x['Substation Type'] === 'GSP' && x.Substation === hr['Upstream GSP']);
@@ -204,7 +259,7 @@ async function tell(pcRaw) {
     const all = A.areas.filter(x => x.f && x.lct?.customers >= 200).map(x => x.f.cml / x.lct.customers / x.f.years.length);
     const word = per > medianCml * 1.5 ? 'well above' : per > medianCml * 1.1 ? 'above' : per < medianCml / 1.5 ? 'well below' : per < medianCml / 1.1 ? 'below' : 'about';
     cards.push(card('Faults, 2016 to 2025', `<p class="num">${fmt(n)}<small> high-voltage faults</small></p>${columns(a.f.years, A.years[0])}<p class="note">Biggest cause: ${esc(lowerFirst(String(a.f.top)))} (${a.f.topShare}% of minutes lost).</p>`));
-    cards.push(card('Minutes off supply a year', `<p class="num">${fmt(per)}<small> per customer</small></p>${strip(all.map(v => Math.min(v, 400)), Math.min(per, 400), `${sub}: ${fmt(per)} minutes; each tick is another SSEN primary`, v => fmt(v))}<p class="note">${word === 'about' ? 'About the same as' : word[0].toUpperCase() + word.slice(1)} the typical SSEN primary (${fmt(medianCml)} minutes). Each tick is another primary.</p>`));
+    cards.push(card('Minutes off supply a year', `<p class="num">${fmt(per)}<small> per customer, from ${term('cml', 'customer-minutes lost')}</small></p>${strip(all.map(v => Math.min(v, 400)), Math.min(per, 400), `${sub}: ${fmt(per)} minutes; each tick is another SSEN primary`, v => fmt(v))}<p class="note">${word === 'about' ? 'About the same as' : word[0].toUpperCase() + word.slice(1)} the typical SSEN primary (${fmt(medianCml)} minutes). Each tick is another primary.</p>`));
     text.push(`It had ${fmt(n)} high-voltage faults from ${A.years[0]} to ${A.years[1]}, costing about ${fmt(per)} minutes of supply per customer per year, ${word} the typical SSEN primary (${fmt(medianCml)}). Biggest cause: ${esc(lowerFirst(String(a.f.top)))}.`);
   }
 
@@ -238,18 +293,19 @@ async function tell(pcRaw) {
   // right now (live)
   const out = r.result.outcode || pc.split(' ')[0], live = outages.filter(o => String(o.postcode || '').replace(/\s+/g, '').startsWith(out.replace(/\s+/g, '')) && !o.date_time_of_restoration && !/completed/i.test(o.status || ''));
   const reg = carbon?.find(x => x.regionid === (a.a === 'SEPD' ? 12 : 1));
-  cards.push(card('Right now', `<div class="now"><div><p class="num">${live.length}</p><p class="note">unrestored ${live.length === 1 ? 'outage' : 'outages'} in ${esc(out)}</p></div>${reg ? `<div><p class="num">${fmt(reg.intensity.forecast)}<small> gCO₂/kWh</small></p>${chip(CI_RAG[reg.intensity.index], esc(reg.intensity.index))}<p class="note">carbon intensity, ${esc(reg.shortname)}</p></div>` : ''}</div>`));
+  cards.push(card('Right now', `<div class="now"><div><p class="num">${live.length}</p><p class="note">unrestored ${live.length === 1 ? 'outage' : 'outages'} in ${esc(out)}</p></div>${reg ? `<div><p class="num">${fmt(reg.intensity.forecast)}<small> ${term('co2', 'gCO₂/kWh')}</small></p>${chip(CI_RAG[reg.intensity.index], esc(reg.intensity.index))}<p class="note">carbon intensity, ${esc(reg.shortname)}</p></div>` : ''}</div>`));
   text.push(`Right now SSEN reports ${live.length} unrestored ${live.length === 1 ? 'outage' : 'outages'} in ${esc(out)}${reg ? `, and electricity in ${esc(reg.shortname)} is running at ${fmt(reg.intensity.forecast)} gCO₂/kWh (${esc(reg.intensity.index)})` : ''}.`);
 
-  story.innerHTML = head1 + `<div class="cards">${layoutCards(cards)}</div><details class="astext"><summary>Read it as text</summary>${text.map(t => `<p>${t}</p>`).join('')}</details>`;
+  story.innerHTML = head1 + `<div class="cards">${layoutCards(cards)}</div>${glossary()}<details class="astext"><summary>Read it as text</summary>${text.map(t => `<p>${t}</p>`).join('')}</details>`;
 }
 
 async function start() {
   const hf = await latestResource('generation-availability-and-network-capacity', /headroom dashboard data/i);
-  [A, head, outages, carbon] = await Promise.all([
+  [A, head, outages, carbon, neso] = await Promise.all([
     getJSON('data/v3-areas.json'), fetchAll(hf.id),
     fetchAll('d0ddd2de-30eb-49fc-a93e-f0044d507aac').catch(() => []),
-    getJSON('https://api.carbonintensity.org.uk/regional').then(j => j.data[0].regions).catch(() => null)]);
+    getJSON('https://api.carbonintensity.org.uk/regional').then(j => j.data[0].regions).catch(() => null),
+    getJSON('https://api.neso.energy/api/3/action/datastore_search?limit=1000&resource_id=bbe2cc72-a6c6-46e6-8f4e-48b879467368').then(j => j.result.records).catch(() => [])]);
   const per = A.areas.filter(a => a.f && a.lct?.customers >= 200).map(a => a.f.cml / a.lct.customers / a.f.years.length).sort((x, y) => x - y);
   medianCml = per[Math.floor(per.length / 2)];
   $('#sources').insertAdjacentHTML('beforeend', ` Headroom: <b>${esc(hf.name)}</b>, updated ${day(hf.modified)}. Areas and facts built ${day(A.computed)} by <span class="n">analysis/v3-run.html</span>.`);
@@ -257,6 +313,14 @@ async function start() {
   $('#pc').value = q; await tell(q);
 }
 $('#ask').addEventListener('submit', e => { e.preventDefault(); if (A) tell($('#pc').value); });
+// a term opens the explanations below and points to its entry
+document.addEventListener('click', e => {
+  const t = e.target.closest('.term'); if (!t) return;
+  const box = $('#terms'), row = $('#term-' + t.dataset.term); if (!box || !row) return;
+  box.open = true; row.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+  row.classList.add('flash'); setTimeout(() => row.classList.remove('flash'), 1600);
+});
+document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('term')) { e.preventDefault(); e.target.click(); } });
 $('#examples').addEventListener('click', e => { const b = e.target.closest('button[data-pc]'); if (b && A) { $('#pc').value = b.dataset.pc; tell(b.dataset.pc); } });
 start().catch(e => { $('#story').innerHTML = `<p class="err">SSEN's data could not be loaded: ${esc(e.message)}. Reload to try again.</p>`; });
 </script>
