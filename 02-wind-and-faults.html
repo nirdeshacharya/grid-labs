@@ -53,7 +53,7 @@ function render(R) {
   <div class="answer">
     <p>At about 50 mph. Below 40 mph wind makes almost no difference; above 50 mph the fault rate climbs steeply, to ${N(top.ratio, 0)} times the calm-day rate at 70 mph and over. Days that windy are ${pct(R.share.days, 1)} of the record but carry ${pct(R.share.faults)} of the faults and ${pct(R.share.cml)} of the customer-minutes lost.</p>
   </div>
-  <p>Which places are most sensitive is less certain than it first looks. Mainland north-east Scotland comes out highest, with faults rising ${N(most.ratio, 0)}-fold in ${esc(name(most.key))} and ${N(second.ratio, 0)}-fold in ${esc(name(second.key))} on 50 mph days. But those districts had few such days, and Storm Arwen alone produced ${pct(most.worstShare)} of ${esc(name(most.key))}'s windy-day faults. Without its three worst days the figure falls to ${N(most.without3, 1)} times, in line with much of southern England.</p>
+  <p>Which places are most sensitive is less certain. Mainland north-east Scotland comes out highest, with faults rising ${N(most.ratio, 0)}-fold in ${esc(name(most.key))} and ${N(second.ratio, 0)}-fold in ${esc(name(second.key))} on 50 mph days. But those districts had few such days, and Storm Arwen alone produced ${pct(most.worstShare)} of ${esc(name(most.key))}'s windy-day faults. Without its three worst days the figure falls to ${N(most.without3, 1)} times, in line with much of southern England.</p>
   <p>The islands look tough at first, rising only ${islands.map(d => x1(d.ratio)).join(', ')} on 50 mph days. That is mostly because 50 mph is routine there. Measured against each district's own windiest 2% of days, Orkney, the Western Isles and Shetland rise ${islands.map(d => x1(d.own)).join(', ')}, close to the mainland middle of ${x1(ownMid)}.</p>
 
   <h2>Fault rate by gust strength</h2>
@@ -85,9 +85,9 @@ function render(R) {
   </tbody></table></div>
   <p class="small">“Own windiest 2%” compares each district's windiest 2% of days (gust threshold shown, in mph) with its calmer half of days, so each place is judged against its own climate. The last column compares customer-minutes lost per day, which also reflects how long repairs take and how many people each circuit serves.</p>
   <ul>
-    <li><b>Sensitive is not the same as exposed.</b> North-east Scotland is the most sensitive to wind, but the islands are the most exposed to it: the Western Isles had ${N(islands.find(d => /WISLES/.test(d.key))?.windyDays)} days of 50 mph gusts against ${N(most.windyDays)} in ${esc(name(most.key))}.</li>
-    <li><b>Customer impact differs again.</b> In ${esc(name(most.key))} and ${esc(name(second.key))}, customer-minutes lost on 50 mph days run at over 100 times the calm-day level, far above any other district. That means faults there cut off more people, for longer, as well as being more frequent.</li>
-    <li><b>${esc(name(least.key))} shows no effect</b> on any measure. A largely underground urban network would explain it, though the data does not say.</li>
+    <li>North-east Scotland is the most sensitive to wind, but the islands are the most exposed to it: the Western Isles had ${N(islands.find(d => /WISLES/.test(d.key))?.windyDays)} days of 50 mph gusts against ${N(most.windyDays)} in ${esc(name(most.key))}.</li>
+    <li>Customer impact differs again. In ${esc(name(most.key))} and ${esc(name(second.key))}, customer-minutes lost on 50 mph days run at over 100 times the calm-day level, far above any other district. That means faults there cut off more people, for longer, as well as being more frequent.</li>
+    <li>${esc(name(least.key))} shows no effect on any measure. A largely underground urban network would explain it, though the data does not say.</li>
   </ul>
 
   <h2>The worst days</h2>
@@ -96,13 +96,13 @@ function render(R) {
     ${R.topDays.map(d => `<tr><td>${longDate(d.date)}</td><td>${STORM[d.date] || ''}</td><td class="r">${fmt(d.faults)}</td><td class="r">${fmt(d.maxGust)} mph</td><td class="r">${d.districtsOver50} of ${R.districts}</td><td class="r">${fmt(d.windShare * 100)}%</td><td class="r">${fmt(d.cml / 1e6, 1)}m</td></tr>`).join('')}
   </tbody></table></div>
   <p class="small">Storm names are my addition from public Met Office naming, matched by date. They are not in SSEN's records.</p>
-  ${calmLooking.length ? `<p><b>${calmLooking.length} of the twelve look calm in the weather data but not in SSEN's records:</b> ${calmLooking.map(d => longDate(d.date)).join(', ')}. On each, SSEN's engineers recorded wind or falling trees as the cause of more than 90% of faults, and flagged most as exceptional events. The fault times are spread through the day, so this does not look like records entered in bulk. The likelier explanation is that the weather data missed the wind: one point per district cannot see a squall line or a local gale, and two of the dates are in summer, when trees in full leaf come down in lower winds. Either way it means the analysis understates how much wind drives faults.</p>` : ''}
+  ${calmLooking.length ? `<p>${calmLooking.length} of the twelve look calm in the weather data but not in SSEN's records: ${calmLooking.map(d => longDate(d.date)).join(', ')}. On each, SSEN's engineers recorded wind or falling trees as the cause of more than 90% of faults, and flagged most as exceptional events. The fault times are spread through the day, so this does not look like records entered in bulk. The likelier explanation is that the weather data missed the wind: one point per district cannot see a squall line or a local gale, and two of the dates are in summer, when trees in full leaf come down in lower winds. Either way it means the analysis understates how much wind drives faults.</p>` : ''}
 
   <h2>Checks</h2>
   <ul>
-    <li><b>Do the recorded causes agree?</b> Wind, windborne material or falling trees account for ${pct(R.bins[0].windShare)} of faults on the calmest days and ${pct(top.windShare)} at 70 mph and over. The weather data and the engineers' own attribution point the same way.</li>
-    <li><b>Is it just winter?</b> Using October to March only, the pattern holds: ${N(R.winter.bins[4].ratio, 1)} times at 50 to 60 mph and ${N(R.winter.bins[6].ratio, 0)} times at 70 mph and over.</li>
-    <li><b>Planned work removed.</b> ${N(R.faults.planned)} records with causes that are not weather faults (operational or safety restrictions, and interruptions to remove a generator) are left out, so they do not inflate the calm-day baseline.</li>
+    <li>Do the recorded causes agree? Wind, windborne material or falling trees account for ${pct(R.bins[0].windShare)} of faults on the calmest days and ${pct(top.windShare)} at 70 mph and over. The weather data and the engineers' own attribution point the same way.</li>
+    <li>Is it just winter? Using October to March only, the pattern holds: ${N(R.winter.bins[4].ratio, 1)} times at 50 to 60 mph and ${N(R.winter.bins[6].ratio, 0)} times at 70 mph and over.</li>
+    <li>${N(R.faults.planned)} records with causes that are not weather faults (operational or safety restrictions, and interruptions to remove a generator) are left out, so they do not inflate the calm-day baseline.</li>
   </ul>
 
   <h2>Method</h2>
@@ -118,14 +118,14 @@ function render(R) {
 
   <h2>What this cannot tell you</h2>
   <ul>
-    <li><b>One weather point per district.</b> Highland and Argyll each span well over 100 km, primary substations cluster in towns and valleys, and reanalysis smooths gusts over a grid of tens of kilometres. Large northern districts are most affected, and their real storm winds are likely stronger than recorded here.</li>
-    <li><b>A ratio hides the baseline.</b> A district that rarely faults on calm days shows a large multiple from a modest rise in faults. The table gives the calm-day rate alongside each ratio for that reason.</li>
-    <li><b>Wind is not the only thing storms bring.</b> Rain, lightning, snow and saturated ground arrive with it. The ratios describe windy days, not wind alone.</li>
-    <li><b>The intervals are still optimistic.</b> Resampling whole days handles one storm's faults arriving together, but not storms that last several days.</li>
-    <li><b>No measure of exposure.</b> Overhead line length and tree cover by district are not used here, so a high ratio could reflect more exposed network, not weaker network.</li>
-    <li><b>Dates in the source are imperfect.</b> ${N(R.faults.outsidePeriod)} records fall outside 2016 to 2025 and are left out. Some carry dates later than the file itself, which points to date errors that may also affect records inside the period.</li>
-    <li><b>Not a forecast.</b> This shows how past faults lined up with past wind. A prediction for a coming storm would need testing against days held back from the analysis.</li>
-    <li><b>District names are inferred.</b> SSEN publishes short codes such as MELK and TAYCEN; the full names here are my reading of them.</li>
+    <li>Each district gets one weather point. Highland and Argyll each span well over 100 km, primary substations cluster in towns and valleys, and reanalysis smooths gusts over a grid of tens of kilometres. Large northern districts are most affected, and their real storm winds are likely stronger than recorded here.</li>
+    <li>A ratio hides the baseline. A district that rarely faults on calm days shows a large multiple from a modest rise in faults. The table gives the calm-day rate alongside each ratio for that reason.</li>
+    <li>Storms bring rain, lightning, snow and saturated ground as well as wind, so the ratios describe windy days, not wind alone.</li>
+    <li>The intervals are still optimistic. Resampling whole days handles one storm's faults arriving together, but not storms that last several days.</li>
+    <li>Overhead line length and tree cover by district are not used here, so a high ratio could reflect more exposed network, not weaker network.</li>
+    <li>Dates in the source are imperfect. ${N(R.faults.outsidePeriod)} records fall outside 2016 to 2025 and are left out. Some carry dates later than the file itself, which points to date errors that may also affect records inside the period.</li>
+    <li>This is not a forecast: it shows how past faults lined up with past wind. A prediction for a coming storm would need testing against days held back from the analysis.</li>
+    <li>SSEN publishes district short codes such as MELK and TAYCEN; the full names here are my reading of them.</li>
   </ul>
 
   <h2>Data and reproduction</h2>

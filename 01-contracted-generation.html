@@ -181,13 +181,13 @@ async function run() {
 
   <h2>What this cannot tell you</h2>
   <ul>
-    <li><b>Contracted is not built.</b> Projects with an accepted offer are often delayed, resized or cancelled. The ratio describes commitments on paper.</li>
-    <li><b>Nameplate is not export capacity.</b> Many grid transformers were designed mainly for power flowing down to customers, and their rating for reverse flow can be lower. Protection settings and the transmission system above add further limits. These usually make the true export limit lower than nameplate.</li>
-    <li><b>MW is treated as MVA.</b> Generation is published in MW and ratings in MVA. Treating them as equal slightly understates loading.</li>
-    <li><b>Wind and solar rarely peak together either.</b> The battery test above addresses only one source of diversity. That is why technical limits and curtailment schemes can connect more than a simple sum allows.</li>
-    <li><b>Shared sites.</b> ${N(rows.filter(r => r.shared).length)} sites are shared with another network operator, whose generation and demand are not in these figures.</li>
-    <li><b>Single-transformer sites.</b> ${N(rows.filter(r => r.single).length)} sites have one transformer, so they have no spare unit if it fails.</li>
-    ${left.length ? `<li><b>Left out.</b> ${esc(left.map(r => r.name).join(', '))} ${left.length === 1 ? 'has' : 'have'} no transformer rating published and ${left.length === 1 ? 'is' : 'are'} not in the ratio or the totals above.</li>` : ''}
+    <li>Contracted is not built. Projects with an accepted offer are often delayed, resized or cancelled, so the ratio describes commitments on paper.</li>
+    <li>Nameplate is not export capacity. Many grid transformers were designed mainly for power flowing down to customers, and their rating for reverse flow can be lower. Protection settings and the transmission system above add further limits. These usually make the true export limit lower than nameplate.</li>
+    <li>Generation is published in MW and transformer ratings in MVA. Treating them as equal slightly understates loading.</li>
+    <li>Wind and solar rarely peak together either, which is why technical limits and curtailment schemes can connect more than a simple sum allows. The battery test above addresses only one source of this diversity.</li>
+    <li>${N(rows.filter(r => r.shared).length)} sites are shared with another network operator, whose generation and demand are not in these figures.</li>
+    <li>${N(rows.filter(r => r.single).length)} sites have one transformer, so they have no spare unit if it fails.</li>
+    ${left.length ? `<li>${esc(left.map(r => r.name).join(', '))} ${left.length === 1 ? 'has' : 'have'} no transformer rating published and ${left.length === 1 ? 'is' : 'are'} not in the ratio or the totals above.</li>` : ''}
   </ul>
 
   <h2>Data</h2>
