@@ -12,7 +12,7 @@
 <body>
 <header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a> · <a href="https://nirdeshacharya.github.io/grid-lens/">Grid Lens</a></nav></div></header>
 <main>
-  <div class="entry">Entry 01 <span class="status finding">Finding</span> <span class="small">· revised 20 November 2026</span></div>
+  <div class="entry">Entry 01 <span class="status finding">Finding</span> <span class="small">· posted 11 November 2026</span></div>
   <h1>Is more generation contracted than the grid supply points can carry?</h1>
   <p class="lede">A grid supply point is where SSEN's network meets the national transmission system. Generation connected below it that local demand does not use has to flow back up through its transformers. This entry compares what is connected and contracted at each one with the transformers installed there, then tests how much of that is likely to export at once.</p>
   <div id="out"><p class="loading">Fetching SSEN's headroom data and computing…</p></div>
@@ -192,7 +192,6 @@ async function run() {
 
   <h2>Data</h2>
   <p>Sources, all SSEN Distribution open data: <b>${esc(file.name)}</b>, updated ${day(file.modified)}${queue ? `; <b>${esc(queue.file.name)}</b>, updated ${day(queue.file.modified)}` : ''}${gate2 ? `; <b>${esc(gate2.res.name)}</b>, updated ${day(gate2.res.last_modified)}` : ''}. Computed in your browser just now, ${new Date().toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' })}; the figures in the text come from this calculation and will change when SSEN publishes new files.</p>
-  <p class="small">Revised 20 November 2026 after review: added the battery sensitivity, queue age, connections reform, SSEN's stated constraints and the base rate for the status check, and corrected the totals so that every figure uses the same ${rows.length} sites.</p>
   <details><summary>All ${rows.length} sites as a table</summary><div class="scroll">
     <table><thead><tr><th>Grid supply point</th><th>Area</th><th>Transformers</th><th class="r">Connected MW</th><th class="r">Contracted MW</th><th class="r">Min demand MVA</th><th class="r">Ratio</th>${queue ? '<th class="r">Without batteries</th>' : ''}<th>SSEN status</th><th>Reinforcement due</th></tr></thead><tbody>
     ${rows.map(r => `<tr><td>${esc(r.name)}</td><td>${r.area}</td><td>${esc(r.txText)}</td><td class="r">${fmt(r.conn, 1)}</td><td class="r">${fmt(r.contr, 1)}</td><td class="r">${fmt(r.minD, 1)}</td><td class="r">${fmt(r.ratio, 2)}</td>${queue ? `<td class="r">${fmt(r.ratioX, 2)}</td>` : ''}<td>${glyph(r.status)} ${esc(r.status)}</td><td>${esc(r.due || '')}</td></tr>`).join('')}

@@ -12,7 +12,7 @@
 <body>
 <header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a> · <a href="https://nirdeshacharya.github.io/grid-lens/">Grid Lens</a></nav></div></header>
 <main>
-  <div class="entry">Entry 04 <span class="status finding">Finding</span> <span class="small">· revised 20 November 2026</span></div>
+  <div class="entry">Entry 04 <span class="status finding">Finding</span> <span class="small">· posted 11 November 2026</span></div>
   <h1>Where could home electrification use up substation headroom before upgrades arrive?</h1>
   <p class="lede">SSEN's spare demand capacity at each primary substation, set against its own projections of heat pumps, electric vehicles and new homes in the area each one serves.</p>
   <p>Headroom is SSEN's estimate of how much extra demand a substation can take. When it runs out, new connections such as heat pumps or chargers need reinforcement, flexibility contracts or a curtailable connection first. It does not mean power cuts, but it does mean the site has less margin if a transformer fails or is out for maintenance.</p>
@@ -186,8 +186,7 @@ run-out year       = first year added demand ≥ headroom published today</pre>
 
   <h2>Data and reproduction</h2>
   <p>Headroom: <b>${esc(D.sources.headroom.name)}</b>, updated ${day(D.sources.headroom.modified)}. Projections: <b>${esc(D.sources.dfes.name)}</b>, updated ${day(D.sources.dfes.modified)}, produced by Regen for SSEN. Both from SSEN Distribution open data.</p>
-  <p>The snapshot is <a href="data/04-runout.json">data/04-runout.json</a>, built by <span class="n">analysis/04-run.html</span> in the <a href="https://github.com/nirdeshacharya/grid-labs/tree/main/analysis">repository</a>. It keeps projections for 2026 to 2040 only.</p>
-  <p class="small">Revised 20 November 2026 after review: the short answer now gives a range instead of one assumption-bound number, the car default moved from 1.0 to 0.6 kW, and the shared-headroom test, constraint breakdown and licence-area split were added.</p>`;
+  <p>The snapshot is <a href="data/04-runout.json">data/04-runout.json</a>, built by <span class="n">analysis/04-run.html</span> in the <a href="https://github.com/nirdeshacharya/grid-labs/tree/main/analysis">repository</a>. It keeps projections for 2026 to 2040 only.</p>`;
 
   const sync = () => { state.kw.forEach((k, i) => { $('#kw' + i).value = k; $('#kwv' + i).textContent = fmt(k, 1) + ' kW'; }); $('#scen').value = state.scen; };
   sync(); render();
