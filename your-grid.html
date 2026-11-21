@@ -78,14 +78,14 @@
   .terms dd { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-2); }
   .terms div { border-radius: 2px; padding: 4px 6px; margin: -4px -6px; transition: background .6s; }
   .terms div.flash { background: color-mix(in srgb, var(--signal) 30%, transparent); }
-  .astext { margin-top: 18px; border: 1px solid var(--rule); border-radius: 3px; padding: 10px 14px; background: var(--panel); }
-  .astext summary { cursor: pointer; font-weight: 600; font-size: 15px; }
-  .astext[open] summary { margin-bottom: 8px; }
+  .seg.view { margin-left: auto; }
+  .seg.view button { padding: 8px 14px; font-size: 14px; }
+  .story[data-view="visual"] .astext, .story[data-view="text"] .hero, .story[data-view="text"] .cards { display: none; }
   .src { display: grid; grid-template-columns: 110px 1fr; gap: 6px 14px; font-size: 13px; color: var(--ink-2); margin: 0 0 10px; max-width: 66ch; }
   .src dt { color: var(--ink-3); }
   .src dd { margin: 0; }
   @media (max-width: 560px) { .src { grid-template-columns: 1fr; gap: 0; } .src dd { margin-bottom: 8px; } }
-  .astext p { font-size: 15px; }
+  .astext p { font-size: 16px; max-width: 66ch; }
   .loading { min-height: 3em; }
 </style>
 </head>
@@ -95,9 +95,9 @@
   <div class="entry">Visual · draws on entries 01, 02 and 04 <span class="small">· posted 20 November 2026</span></div>
   <h1>Your postcode's grid story</h1>
   <p class="lede">Type a postcode in SSEN's area, central southern England or the north of Scotland, to read about the electricity network that serves it: how much room it has, how often it fails, how storms hit it, and what is coming.</p>
-  <form class="ask" id="ask"><label class="small" for="pc">Postcode</label><input id="pc" name="pc" autocomplete="postal-code" placeholder="e.g. RG1 3BE" required><button>Tell the story</button></form>
+  <form class="ask" id="ask"><label class="small" for="pc">Postcode</label><input id="pc" name="pc" autocomplete="postal-code" placeholder="e.g. RG1 3BE" required><button>Tell the story</button><span class="seg view" id="view" role="group" aria-label="Show as"><button type="button" data-view="visual" aria-pressed="true">Visual</button><button type="button" data-view="text" aria-pressed="false">Text</button></span></form>
   <p class="examples" id="examples">Or try <button data-pc="RG1 3BE">Reading</button>, <button data-pc="IV2 3PA">Inverness</button>, <button data-pc="KW15 1JY">Kirkwall</button>, <button data-pc="PH8 0AA">Dunkeld</button> or <button data-pc="SP1 1BL">Salisbury</button>.</p>
-  <div class="story" id="story" aria-live="polite"><p class="loading">Loading SSEN's network data…</p></div>
+  <div class="story" id="story" data-view="visual" aria-live="polite"><p class="loading">Loading SSEN's network data…</p></div>
 
   <h2>Where this comes from</h2>
   <dl class="src" id="sources">
@@ -315,7 +315,7 @@ async function tell(pcRaw) {
   cards.push(card('Right now', `<div class="now"><div><p class="num">${live.length}</p><p class="note">unrestored ${live.length === 1 ? 'outage' : 'outages'} in ${esc(out)}</p></div>${reg ? `<div><p class="num">${fmt(reg.intensity.forecast)}<small> ${term('co2', 'gCO₂/kWh')}</small></p>${chip(CI_RAG[reg.intensity.index], esc(reg.intensity.index))}<p class="note">carbon intensity, ${esc(reg.shortname)}</p></div>` : ''}</div>`));
   text.push(`Right now SSEN reports ${live.length} unrestored ${live.length === 1 ? 'outage' : 'outages'} in ${esc(out)}${reg ? `, and electricity in ${esc(reg.shortname)} is running at ${fmt(reg.intensity.forecast)} gCO₂/kWh (${esc(reg.intensity.index)})` : ''}.`);
 
-  story.innerHTML = head1 + `<div class="cards">${layoutCards(cards)}</div>${glossary()}<details class="astext"><summary>Read it as text</summary>${text.map(t => `<p>${t}</p>`).join('')}</details>`;
+  story.innerHTML = head1 + `<div class="cards">${layoutCards(cards)}</div><div class="astext">${text.map(t => `<p>${t}</p>`).join('')}</div>${glossary()}`;
 }
 
 async function start() {
@@ -331,6 +331,11 @@ async function start() {
   const q = new URLSearchParams(location.search).get('pc') || 'RG1 3BE';
   $('#pc').value = q; await tell(q);
 }
+$('#view').addEventListener('click', e => {
+  const b = e.target.closest('button[data-view]'); if (!b) return;
+  $('#story').dataset.view = b.dataset.view;
+  for (const x of $('#view').querySelectorAll('button')) x.setAttribute('aria-pressed', x === b);
+});
 $('#ask').addEventListener('submit', e => { e.preventDefault(); if (A) tell($('#pc').value); });
 // a term opens the explanations below and points to its entry
 document.addEventListener('click', e => {
