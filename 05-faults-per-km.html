@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Faults per km of line · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .stk { display: flex; height: 12px; gap: 1px; }
+  .stk i { display: block; height: 100%; }
+  .stk i:last-child { border-radius: 0 2px 2px 0; }
+  .pair { display: grid; grid-template-columns: minmax(120px, 210px) 1fr 46px; gap: 4px 10px; align-items: center; font-size: 13px; }
+  .pair .trk { position: relative; height: 14px; background: var(--fill); border-radius: 2px; }
+  .pair .trk i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; }
+  .pair .trk b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+  .pair .lab { color: var(--ink-2); }
+  .pair .val { font: 12px var(--mono); text-align: right; }
+  .pair .gap { grid-column: 1 / -1; height: 8px; }
+  @media (max-width: 560px) {
+    #out .hb, #out .pair { grid-template-columns: 1fr 44px; gap: 2px 8px; }
+    #out .hb .lab, #out .pair .lab { grid-column: 1 / -1; margin-top: 6px; }
+    #out .hb .axis { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a></nav></div></header>
+<main>
+  <div class="entry">Entry 05 <span class="status finding">Finding</span> <span class="small">· posted 21 November 2026</span></div>
+  <h1>Once you allow for how much overhead line each place has, where does the network fault most?</h1>
+  <p class="lede">Ten years of overhead line faults, divided by the length of overhead line they happened on, district by district and feeder by feeder.</p>
+  <p>Raw fault counts mostly measure size. A district with 7,000 km of overhead line will have more faults than one with 500 km, even if each kilometre is just as reliable. Entry 02 had no way to allow for that. SSEN now publishes the route of every overhead line, so this entry divides by it.</p>
+  <div id="out"><p class="loading">Loading the data…</p></div>
+  <footer>Part of <a href="./">Grid Labs</a>. A personal project, built in my own time from public open data. Not an SSEN product and not SSEN's view. This is a statistical comparison of published records, not an engineering assessment of any circuit.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+// SSEN publishes district short codes only. These names are my reading of the codes, as in entry 02.
+const DISTRICT = { 'N/EAST': 'North East Scotland', HIGH: 'Highland', TAYCEN: 'Tayside and Central', ARGYLL: 'Argyll and West Highland', SHET: 'Shetland', WISLES: 'Western Isles', ORKN: 'Orkney',
+  POOL: 'Poole', MELK: 'Melksham', OXFN: 'Oxford North', SWIN: 'Swindon', OXFS: 'Oxford South', NEWF: 'New Forest', PETE: 'Petersfield', BASI: 'Basingstoke', REAN: 'Reading North', ALDE: 'Aldershot',
+  REAS: 'Reading South', CHIC: 'Chichester', SALI: 'Salisbury', SLOU: 'Slough', YEOV: 'Yeovil', NEWB: 'Newbury', BOUR: 'Bournemouth', BRAC: 'Bracknell', ANDO: 'Andover', PORT: 'Portsmouth',
+  ISLE: 'Isle of Wight', SOTN: 'Southampton', WLON: 'West London', EGHA: 'Egham' };
+const CAUSES = [['trees', 'Trees', '--good'], ['wind', 'Wind', '--s1'], ['animals', 'Birds and animals', '--warn'], ['lightning', 'Lightning', '--violet'],
+  ['weather', 'Snow and ice', '--crit'], ['ageing', 'Ageing and wear', '--s2'], ['transient', 'Transient, no repair', '--na'], ['other', 'Other', '--rule']];
+const MIN_DISTRICT_KM = 300;   // below this a district's rate rests on too little line to compare
+const N = (v, d = 0) => `<b class="n">${fmt(v, d)}</b>`;
+const pct = v => `<b class="n">${fmt(v * 100)}%</b>`;
+const name = k => DISTRICT[k.split('/').slice(1).join('/')] || k;
+const share = (d, g) => d.groups[g] / d.rate;
+const spearman = (a, b) => { const rk = v => { const s = v.map((x, i) => [x, i]).sort((p, q) => p[0] - q[0]), r = []; s.forEach(([, i], j) => r[i] = j); return r; };
+  const ra = rk(a), rb = rk(b), n = a.length; return 1 - 6 * ra.reduce((s, x, i) => s + (x - rb[i]) ** 2, 0) / (n * (n * n - 1)); };
+
+function render(R) {
+  const big = R.districts.filter(d => d.km >= MIN_DISTRICT_KM), small = R.districts.filter(d => d.km < MIN_DISTRICT_KM);
+  const byCount = [...big].sort((a, b) => b.faults - a.faults), rankCount = new Map(byCount.map((d, i) => [d.key, i + 1]));
+  const get = c => big.find(d => d.key.endsWith('/' + c));
+  const shet = get('SHET'), orkn = get('ORKN'), wis = get('WISLES'), high = get('HIGH'), neast = get('N/EAST'), pete = get('PETE');
+  const islands = [shet, orkn, wis], south = big.filter(d => d.key.startsWith('SEPD') && d.rate > R.total.rate);
+  const north = big.filter(d => d.key.startsWith('SHEPD') && !islands.includes(d));
+  // share of faults from one cause group, or several, pooled over a set of districts
+  const pooled = (ds, g) => { const gs = [].concat(g); return ds.reduce((a, d) => a + gs.reduce((t, x) => t + d.groups[x], 0) * d.km, 0) / ds.reduce((a, d) => a + d.rate * d.km, 0); };
+  const p10 = R.feederTest.persist[0], p25 = R.feederTest.persist[1];
+  const rho = spearman(big.map(d => d.rate), big.map(d => d.rate11));
+  const xmax = Math.ceil(Math.max(...big.map(d => d.hi)) / 2) * 2;
+  const axis = (max, step, unit = '') => `<div class="axis">${Array.from({ length: Math.floor(max / step) + 1 }, (_, i) => `<span style="left:${i * step / max * 100}%">${i * step}${unit}</span>`).join('')}</div><div></div>`;
+  const hmax = Math.max(...R.feederTest.hist.map(b => b.feeders));
+
+  $('#out').innerHTML = `
+  <p class="snapshot">Snapshot: computed ${day(R.computed)} from fault records for ${R.years[0]} to ${R.years[1]} and overhead line routes published ${day(R.sources.lines.modified)}. It does not recompute when the page opens, because it measures ${fmt(R.lines.segments)} line segments.</p>
+
+  <h2>Short answer</h2>
+  <div class="answer">
+    <p>Across SSEN, overhead lines fault about ${N(R.total.rate, 1)} times per 100 km a year. Shetland (${N(shet.rate, 1)}) and Orkney (${N(orkn.rate, 1)}) are well above that, and so are the Reading and Chichester districts. Highland, with more overhead line than anywhere except North East Scotland, is among the lowest at ${N(high.rate, 1)}.</p>
+  </div>
+  <p>The reasons differ by place. In the southern districts above the average, falling and growing trees cause ${pct(pooled(south, 'trees'))} of overhead line faults. On the three island groups trees cause almost none. Ageing equipment, trips with nothing found to repair, and birds lead there instead. Wind is ${pct(pooled(islands, 'wind'))} of island faults, about the same share as everywhere else.</p>
+  <p>Bad feeders also tend to stay bad. The tenth of overhead line with the highest fault rate in ${R.years[0]} to ${R.half} went on to carry ${pct(p10.second)} of faults in ${R.half + 1} to ${R.years[1]}, close to twice its share of the line.</p>
+
+  <h2>Faults per 100 km by district</h2>
+  <figure>
+    <div class="hb" style="--one:${R.total.rate / xmax * 100}%">${axis(xmax, 4)}
+      ${big.map(d => `<div class="lab" title="${esc(name(d.key))}">${esc(name(d.key))} <small>· ${fmt(d.km)} km</small></div>
+        <div class="trk" data-tip="${esc(name(d.key))}\n${fmt(d.km)} km of overhead line on ${fmt(d.feeders)} circuits\n${fmt(d.faults)} overhead line faults in ${R.years[1] - R.years[0] + 1} years\n${fmt(d.rate, 1)} per 100 km a year (95% interval ${fmt(d.lo, 1)} to ${fmt(d.hi, 1)})\n${rankCount.get(d.key)} of ${big.length} by raw fault count"><i class="${d.key.startsWith('SHEPD') ? '' : 'dim'}" style="width:${d.rate / xmax * 100}%"></i><u style="left:${d.lo / xmax * 100}%;width:${(d.hi - d.lo) / xmax * 100}%"></u></div>
+        <div class="val">${fmt(d.rate, 1)}</div>`).join('')}
+    </div>
+    <figcaption>Overhead line faults per 100 km of overhead line per year, ${R.years[0]} to ${R.years[1]}. Blue bars are the north of Scotland, grey bars southern England. The dark line across each bar is a 95% interval for the count; the thin vertical line is the network average of ${fmt(R.total.rate, 1)}. Districts with less than ${MIN_DISTRICT_KM} km of overhead line are listed separately below.</figcaption>
+  </figure>
+  <p>Dividing by length reorders the list. ${esc(name(neast.key))} has the most overhead line faults of any district, ${N(neast.faults)}, but also ${N(neast.km)} km of line, so its rate of ${N(neast.rate, 1)} sits just below average. ${esc(name(pete.key))} has only ${N(pete.km)} km and a much higher rate, ${N(pete.rate, 1)}.</p>
+  <p>The two licence areas are close: ${N(R.areas.SHEPD.rate, 2)} in the north of Scotland and ${N(R.areas.SEPD.rate, 2)} in southern England. The north has more line and, per kilometre, slightly fewer faults.</p>
+  <p class="small">${['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven'][small.length] || small.length} mostly urban districts have under ${MIN_DISTRICT_KM} km of overhead line each: ${small.map(d => `${esc(name(d.key))} (${fmt(d.km)} km, ${fmt(d.rate, 1)})`).join(', ')}. Their rates are high, but they rest on so little line that a few kilometres missing from the line data, or a few cable faults recorded as overhead, would change them a lot.</p>
+
+  <h2>What causes them</h2>
+  <div class="key">${CAUSES.map(([, l, c]) => `<span><i class="sq" style="background:var(${c})"></i>${l}</span>`).join('')}</div>
+  <figure>
+    <div class="hb">${axis(xmax, 4)}
+      ${big.map(d => `<div class="lab" title="${esc(name(d.key))}">${esc(name(d.key))}</div>
+        <div class="stk" data-tip="${esc(name(d.key))}, per 100 km a year\n${CAUSES.map(([g, l]) => `${l}: ${fmt(d.groups[g], 2)} (${fmt(share(d, g) * 100)}%)`).join('\n')}">${CAUSES.map(([g, , c]) => `<i style="width:${d.groups[g] / xmax * 100}%;background:var(${c})"></i>`).join('')}</div>
+        <div class="val">${fmt(d.rate, 1)}</div>`).join('')}
+    </div>
+    <figcaption>The same rates split by the cause SSEN recorded, grouped. Trees covers falling live and dead trees and growing trees. Wind covers wind and gale and windborne material. "Transient, no repair" means the circuit tripped and came back with nothing found to fix.</figcaption>
+  </figure>
+  <ul>
+    <li>Trees are the largest single cause across the network, ${N(R.groups.trees, 2)} faults per 100 km a year, ahead of ageing and wear at ${N(R.groups.ageing, 2)} and wind at ${N(R.groups.wind, 2)}.</li>
+    <li>Wind and trees together cause ${pct(pooled(south, ['wind', 'trees']))} of overhead line faults in the southern districts above the average, ${pct(pooled(north, ['wind', 'trees']))} on the northern mainland, and ${pct(pooled(islands, ['wind', 'trees']))} on the islands.</li>
+    <li>So the islands' high rates have other causes. Orkney's biggest is birds and animals, ${pct(share(orkn, 'animals'))} of its overhead line faults. Shetland's is ageing and wear, ${pct(share(shet, 'ageing'))}, and snow and ice add ${pct(share(shet, 'weather'))}.</li>
+  </ul>
+
+  <h2>Do bad feeders stay bad?</h2>
+  <p>A high rate on one feeder could be bad luck in one storm. To test that, I ranked the ${fmt(R.feederTest.feeders)} feeders with at least ${R.minKm} km of overhead line by their fault rate in ${R.years[0]} to ${R.half}, then looked at their faults in ${R.half + 1} to ${R.years[1]}, which played no part in the ranking.</p>
+  <figure>
+    <div class="pair">
+      ${R.feederTest.persist.map((p, i) => `
+        <div class="lab">Worst ${fmt(p.lineShare * 100)}% of line, ${R.years[0]} to ${R.half}</div><div class="trk" data-tip="Share of faults in ${R.years[0]} to ${R.half}, the years used to pick the feeders"><i style="width:${p.first * 100}%;background:var(--na)"></i><b style="left:${p.lineShare * 100}%"></b></div><div class="val">${fmt(p.first * 100)}%</div>
+        <div class="lab">Same line, ${R.half + 1} to ${R.years[1]}</div><div class="trk" data-tip="Share of faults in ${R.half + 1} to ${R.years[1]}, years not used to pick the feeders"><i style="width:${p.second * 100}%;background:var(--s2)"></i><b style="left:${p.lineShare * 100}%"></b></div><div class="val">${fmt(p.second * 100)}%</div>
+        ${i < R.feederTest.persist.length - 1 ? '<div class="gap"></div>' : ''}`).join('')}
+    </div>
+    <figcaption>Share of all overhead line faults on the selected feeders. The dark tick marks their share of the line, which is what you would expect if every kilometre were equally likely to fault. Grey bars use the years that chose the feeders, so they are inflated by luck. Orange bars use later years only.</figcaption>
+  </figure>
+  <p>Some of the first-half lead was luck: the worst tenth's share falls from ${pct(p10.first)} to ${pct(p10.second)}. But it stays well above ${pct(p10.lineShare)}, and the worst quarter of line still carries ${pct(p25.second)} of later faults. Past fault rate is a useful, if imperfect, guide to where the next faults will be.</p>
+  <figure>
+    <div class="colchart">${R.feederTest.hist.map(b => `<div class="c" data-tip="${b.hi == null ? `${b.lo} or more` : `${b.lo} to ${b.hi}`} faults per 100 km a year: ${fmt(b.feeders)} feeders"><i class="a" style="height:${b.feeders / hmax * 100}%"></i><span>${fmt(b.feeders)}</span></div>`).join('')}</div>
+    <div class="colx">${R.feederTest.hist.map(b => `<span>${b.hi == null ? b.lo + '+' : b.lo}</span>`).join('')}</div>
+    <figcaption>Feeders with at least ${R.minKm} km of overhead line, by faults per 100 km a year over the whole decade. The middle feeder has ${fmt(R.feederTest.median, 1)}; one in ten has ${fmt(R.feederTest.p90, 1)} or more, and one in ten ${fmt(R.feederTest.p10, 1)} or less.</figcaption>
+  </figure>
+
+  <h2>Checks</h2>
+  <ul>
+    <li>Does mixing voltages distort it? Counting only 11 kV faults against 11 kV line gives a similar order: the rank correlation with the main result is ${N(rho, 2)} across the ${big.length} districts.</li>
+    <li>How many faults could be matched to a line? ${N(R.faults.matched)} of ${fmt(R.faults.overhead)} overhead line faults (${fmt(R.faults.matched / R.faults.overhead * 100)}%) name a feeder that appears in the line data. The ${fmt(R.faults.unmatched)} that do not are left out of both the counts and the rates.</li>
+    <li>${N(R.faults.planned)} planned records (operational or safety restrictions, and interruptions to remove a generator) are left out, as in entry 02.</li>
+  </ul>
+
+  <h2>Method</h2>
+  <ol>
+    <li>Take SSEN's overhead line dataset: ${fmt(R.lines.segments)} segments, ${fmt(R.lines.km)} km in all, of which ${fmt(R.lines.byVoltage['11 kV'])} km is 11 kV and ${fmt(R.lines.byVoltage['33 kV'])} km is 33 kV. Measure each segment from its route, which is published in British National Grid metres.</li>
+    <li>Group segments by feeder using the circuit number: "1607.003" is primary 1607, feeder 3. Segments north of ${fmt(550)} km northing are SHEPD, the rest SEPD. That gives ${fmt(R.lines.feeders)} feeders. ${fmt(R.lines.noFeeder)} segments (${fmt(R.lines.noFeederKm)} km) carry no usable circuit number and are left out.</li>
+    <li>Take every high-voltage fault record in the ten years ${R.years[0]} to ${R.years[1]}, less planned records, and keep those whose equipment is overhead lines. Match each to its feeder by the same primary and feeder numbers.</li>
+    <li>Give each feeder to the district most of its fault records name, and add up line length and faults by district.</li>
+    <li>Divide: faults per 100 km of line per year. The 95% interval treats the count as Poisson.</li>
+  </ol>
+  <pre>rate = overhead line faults / (km of overhead line ÷ 100) / ${R.years[1] - R.years[0] + 1} years</pre>
+
+  <h2>What this cannot tell you</h2>
+  <ul>
+    <li>The line data is today's network; the faults go back ten years. Lines built, rebuilt or put underground in that time are measured as they are now.</li>
+    <li>A fault is counted against its feeder's overhead line even though the record does not say where on the feeder it happened.</li>
+    <li>Cause groups follow SSEN's recorded cause. "Transient, no repair" hides an unknown mix, and some of it will be wind, birds or lightning.</li>
+    <li>Rates are counts, not consequences. A fault on a long rural feeder may cut off a few dozen customers; one in a town, thousands. Customer-minutes lost are not used here.</li>
+    <li>Feeders differ in many ways this does not see: age, conductor type, tree cutting cycles, terrain and exposure. A high rate says where to look, not why.</li>
+    <li>SSEN publishes district short codes such as MELK and TAYCEN; the full names here are my reading of them.</li>
+  </ul>
+
+  <h2>Data and reproduction</h2>
+  <p>Overhead lines: <b>${esc(R.sources.lines.name)}</b>, updated ${day(R.sources.lines.modified)}. Fault records: ${R.sources.faults.map((s, i) => `<b>${esc(s.name)}</b> (${['north of Scotland', 'southern England'][i]}), updated ${day(s.modified)}`).join('; ')}. All SSEN Distribution open data.</p>
+  <p>The result file is <a href="data/05-lines.json">data/05-lines.json</a>. The script that produced it, <span class="n">05-run.html</span>, is in the <a href="https://github.com/nirdeshacharya/grid-labs/tree/main/analysis">analysis folder</a> of the repository and runs in a browser.</p>`;
+}
+getJSON('data/05-lines.json').then(render).catch(e => { $('#out').innerHTML = `<p class="err">The result file could not be loaded: ${esc(e.message)}.</p>`; });
+</script>
+</body>
+</html>
