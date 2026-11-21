@@ -70,16 +70,21 @@
   .h3t { font: inherit; text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 4px; }
   .mix { display: flex; gap: 2px; height: 18px; margin: 4px 0 8px; border-radius: 2px; overflow: hidden; }
   .mix i { display: block; min-width: 2px; }
-  .terms { margin-top: 18px; border: 1px solid var(--rule); border-radius: 3px; padding: 10px 14px; background: var(--panel); }
-  .terms summary { cursor: pointer; font-weight: 600; font-size: 15px; }
+  .terms { margin-top: 14px; }
+  .terms summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
   .terms dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; margin: 12px 0 4px; }
   @media (max-width: 560px) { .terms dl { grid-template-columns: 1fr; } }
   .terms dt { font-weight: 600; font-size: 14px; }
   .terms dd { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-2); }
   .terms div { border-radius: 2px; padding: 4px 6px; margin: -4px -6px; transition: background .6s; }
   .terms div.flash { background: color-mix(in srgb, var(--signal) 30%, transparent); }
-  .astext { margin-top: 18px; }
-  .astext summary { cursor: pointer; font-size: 14px; color: var(--ink-2); }
+  .astext { margin-top: 18px; border: 1px solid var(--rule); border-radius: 3px; padding: 10px 14px; background: var(--panel); }
+  .astext summary { cursor: pointer; font-weight: 600; font-size: 15px; }
+  .astext[open] summary { margin-bottom: 8px; }
+  .src { display: grid; grid-template-columns: 110px 1fr; gap: 6px 14px; font-size: 13px; color: var(--ink-2); margin: 0 0 10px; max-width: 66ch; }
+  .src dt { color: var(--ink-3); }
+  .src dd { margin: 0; }
+  @media (max-width: 560px) { .src { grid-template-columns: 1fr; gap: 0; } .src dd { margin-bottom: 8px; } }
   .astext p { font-size: 15px; }
   .loading { min-height: 3em; }
 </style>
@@ -95,7 +100,13 @@
   <div class="story" id="story" aria-live="polite"><p class="loading">Loading SSEN's network data…</p></div>
 
   <h2>Where this comes from</h2>
-  <p class="small" id="sources">Your postcode is sent to postcodes.io to find where it is, and nothing is stored. The substation that serves it comes from SSEN's primary supply-area boundaries, simplified to about 100 m, so a postcode right on a boundary can land in the neighbouring area. Headroom, generation and live outages are fetched from SSEN as the page loads. The generation mix and carbon intensity come from NESO's Carbon Intensity API, and each grid supply point's transmission code from NESO's grid supply point lookup. The transmission owner and voltage come from the grid supply point's transformer ratio in SSEN's headroom file. The fault record, storm sensitivity, low-carbon counts and the look ahead come from <a href="02-wind-and-faults.html">entry 02</a>, <a href="04-headroom-runout.html">entry 04</a> and SSEN's datasets as built on the date below.</p>
+  <dl class="src" id="sources">
+    <dt>Your postcode</dt><dd>Located with postcodes.io. Nothing is stored.</dd>
+    <dt>SSEN, live</dt><dd>Headroom, generation queue, outages, and the transmission voltage from each grid supply point's transformer ratio.</dd>
+    <dt>NESO, live</dt><dd>Generation mix, carbon intensity and the grid supply point lookup.</dd>
+    <dt>Built ahead</dt><dd>Supply areas, faults, storms and low-carbon counts, from SSEN's datasets and <a href="02-wind-and-faults.html">entry 02</a> and <a href="04-headroom-runout.html">entry 04</a>.</dd>
+  </dl>
+  <p class="small">Areas are simplified to about 100 m, so a postcode on a boundary can land next door.</p>
   <footer>Part of <a href="./">Grid Labs</a>. Not affiliated with SSEN. This is a summary of published data, not advice on connecting anything to the network.</footer>
 </main>
 <script src="lab.js"></script>
@@ -316,7 +327,7 @@ async function start() {
     getJSON('https://api.neso.energy/api/3/action/datastore_search?limit=1000&resource_id=bbe2cc72-a6c6-46e6-8f4e-48b879467368').then(j => j.result.records).catch(() => [])]);
   const per = A.areas.filter(a => a.f && a.lct?.customers >= 200).map(a => a.f.cml / a.lct.customers / a.f.years.length).sort((x, y) => x - y);
   medianCml = per[Math.floor(per.length / 2)];
-  $('#sources').insertAdjacentHTML('beforeend', ` Headroom: <b>${esc(hf.name)}</b>, updated ${day(hf.modified)}. Areas and facts built ${day(A.computed)} by <span class="n">analysis/v3-run.html</span>.`);
+  $('#sources').insertAdjacentHTML('beforeend', `<dt>Dates</dt><dd>Headroom file updated ${day(hf.modified)}. Areas built ${day(A.computed)}.</dd>`);
   const q = new URLSearchParams(location.search).get('pc') || 'RG1 3BE';
   $('#pc').value = q; await tell(q);
 }
