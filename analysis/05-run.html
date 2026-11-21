@@ -6,115 +6,156 @@
      2. open http://localhost:5179/analysis/05-run.html and save the JSON into data/05-lines.json
      It measures the length of every overhead line circuit in SSEN's overhead line dataset, matches overhead line
      faults to the same circuits by feeder number, and works out faults per 100 km of line by district.
+     The headline measure is 11 kV only: 132 kV is distribution in southern England but transmission in the north
+     of Scotland, so mixing voltages would not compare like with like.
      SSEN's API only answers browsers, which is why this runs here and not in Python. -->
 <body style="font:13px ui-monospace,Menlo,monospace;white-space:pre-wrap;padding:16px">running…
 <script src="../lab.js"></script>
 <script>
 const LINES = 'ssen_overhead_lines';
 const HV = { SHEPD: '245d5825-7d83-4d17-a2c5-04b473b9b408', SEPD: 'f0d9d3fe-6739-4700-a699-f227b4e1de41' };
-const FIELDS = ['DISTRICT_SHORT_CODE', 'HV_INCIDENT_TIME', 'VOLTAGE_1', 'EQUIPMENT_CODE', 'CAUSE_CODE', 'CAUSE', 'HV_CUST_MINS_LOST'];
+const FIELDS = ['DISTRICT_SHORT_CODE', 'HV_INCIDENT_TIME', 'VOLTAGE_1', 'EQUIPMENT_CODE', 'CAUSE_CODE', 'CAUSE'];
 const PLANNED = new Set(['75', '86']);    // operational or safety restriction; interruption to remove a generator: as in entry 02
 const YEARS = [2016, 2025], HALF = 2020;  // ten full years, split into two five-year halves for the persistence test
-const NORTH_FROM = 550000;                // British National Grid northing, metres: everything above is SHEPD, everything below SEPD
-const MIN_KM = 10;                        // feeders with less overhead line than this are too noisy to rank one by one
-const r2 = x => Math.round(x * 100) / 100, r1 = x => Math.round(x * 10) / 10;
+const NORTH_FROM = 550000;                // British National Grid northing, metres. SHEPD lines start at 561 km, SEPD lines end at 234 km.
+const MIN_KM = 10;                        // feeders with less 11 kV overhead line than this are too noisy to rank one by one
+const BOOT = 1000;                        // day resamples for the intervals
+const VOLTS = ['11', '33', '132'];        // voltages reported separately; 11 kV is the headline
+const r2 = x => Math.round(x * 100) / 100, r1 = x => Math.round(x * 10) / 10, r3 = x => Math.round(x * 1000) / 1000;
+const rng = (s => () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; })(20261121);
 
 // Cause groups, from SSEN's cause descriptions
 const GROUPS = [['trees', /tree/i], ['wind', /wind|gale/i], ['animals', /bird|animal|vermin|insect/i], ['lightning', /lightning/i],
   ['weather', /snow|ice|sleet|frost|rain|flood|solar|temperature|fog|mist/i], ['ageing', /ageing|wear|corrosion|deteriorat/i], ['transient', /transient/i]];
+const GNAMES = [...GROUPS.map(([g]) => g), 'other'];
 const group = cause => (GROUPS.find(([, re]) => re.test(cause || '')) || ['other'])[0];
-
-// 95% interval for a Poisson count (Byar's approximation)
-const poisson = f => f === 0 ? [0, 3.69] : [f * (1 - 1 / (9 * f) - 1.96 / (3 * Math.sqrt(f))) ** 3, (f + 1) * (1 - 1 / (9 * (f + 1)) + 1.96 / (3 * Math.sqrt(f + 1))) ** 3];
+const volt = v => { const x = parseFloat(v); return Number.isFinite(x) ? String(x) : 'unknown'; };   // "11.000 kV" and 11 both become "11"
 
 async function run() {
   const pkg = (await getJSON(CKAN + 'package_show?id=' + LINES)).result, lineRes = pkg.resources.find(r => r.datastore_active);
-  const [lines, n, s, mn, ms] = await Promise.all([fetchAll(lineRes.id, ['circuit_nrn', 'nominal_voltage_pp', 'network_type', 'route']),
+  const [lines, n, s, mn, ms] = await Promise.all([fetchAll(lineRes.id, ['circuit_nrn', 'nominal_voltage_pp', 'route']),
     fetchAll(HV.SHEPD, [...FIELDS, 'NRN_NORTH']), fetchAll(HV.SEPD, [...FIELDS, 'NRN_SOUTH']),
     getJSON(CKAN + 'resource_show?id=' + HV.SHEPD), getJSON(CKAN + 'resource_show?id=' + HV.SEPD)]);
 
-  // 1. overhead line length per feeder. Routes are in British National Grid metres, so length is plain geometry.
+  // 1. overhead line length per feeder and voltage. Routes are in British National Grid metres, so length is plain geometry.
   const feeders = new Map(), byVoltage = {}, skipped = { noFeeder: 0, km: 0 };
   for (const r of lines) {
     const pts = (String(r.route).match(/-?\d+\.?\d*\s+-?\d+\.?\d*/g) || []).map(t => t.trim().split(/\s+/).map(Number));
     let L = 0, sy = 0; pts.forEach(([x, y], i) => { sy += y; if (i) L += Math.hypot(x - pts[i - 1][0], y - pts[i - 1][1]); });
-    const km = L / 1000, v = String(r.nominal_voltage_pp || 'unknown').replace(/\.0+ kV/, ' kV');
-    byVoltage[v] = (byVoltage[v] || 0) + km;
+    const km = L / 1000, v = volt(r.nominal_voltage_pp), area = sy / pts.length > NORTH_FROM ? 'SHEPD' : 'SEPD';
+    byVoltage[area + ' ' + v] = (byVoltage[area + ' ' + v] || 0) + km;
     const m = String(r.circuit_nrn || '').match(/^(\d{4})\.(\d{3})/);
     if (!m) { skipped.noFeeder++; skipped.km += km; continue; }
-    const key = (sy / pts.length > NORTH_FROM ? 'SHEPD' : 'SEPD') + ':' + +m[1] + ':' + +m[2];
-    const e = feeders.get(key) || feeders.set(key, { km: 0, km11: 0, f: [0, 0], f11: 0, groups: {}, dist: {} }).get(key);
-    e.km += km; if (v === '11 kV') e.km11 += km;
+    const key = area + ':' + +m[1] + ':' + +m[2];
+    const e = feeders.get(key) || feeders.set(key, { area, km: {}, f: {}, half: [0, 0], days: new Set(), groups: {}, dist: {} }).get(key);
+    e.km[v] = (e.km[v] || 0) + km;
   }
 
-  // 2. faults: ten full years, planned records out, keyed to the same feeder numbers
+  // 2. faults in the ten years, planned records out, keyed to the same feeder numbers
   const keyOf = (area, r) => {
     if (area === 'SHEPD') { const [p, f] = String(r.NRN_NORTH ?? '').split('_'); return p && f ? `SHEPD:${+p}:${+f}` : null; }
     return r.NRN_SOUTH == null ? null : `SEPD:${Math.floor(r.NRN_SOUTH / 1000)}:${r.NRN_SOUTH % 1000}`;
   };
-  const count = { published: n.length + s.length, outsidePeriod: 0, planned: 0, used: 0, overhead: 0, matched: 0, unmatched: 0 };
-  const primDist = new Map();
-  for (const [area, rows] of [['SHEPD', n], ['SEPD', s]]) for (const r of rows) {
+  const count = { published: n.length + s.length, outsidePeriod: 0, planned: 0, used: 0, overhead: 0, overhead11: 0, matched11: 0, unmatched11: 0, repeats11: 0 };
+  const rows = [], primDist = new Map();
+  for (const [area, list] of [['SHEPD', n], ['SEPD', s]]) for (const r of list) {
     const y = +String(r.HV_INCIDENT_TIME).slice(0, 4);
     if (!(y >= YEARS[0] && y <= YEARS[1])) { count.outsidePeriod++; continue; }
     if (PLANNED.has(String(r.CAUSE_CODE))) { count.planned++; continue; }
     count.used++;
     const key = keyOf(area, r), d = area + '/' + r.DISTRICT_SHORT_CODE, e = key && feeders.get(key);
     if (key) { const pk = key.split(':').slice(0, 2).join(':'), pd = primDist.get(pk) || primDist.set(pk, {}).get(pk); pd[d] = (pd[d] || 0) + 1; }
-    if (e) e.dist[d] = (e.dist[d] || 0) + 1;            // every fault on the feeder votes for its district
-    if (String(r.EQUIPMENT_CODE) !== '1') continue;       // 1 = overhead lines
-    count.overhead++;
-    if (!e) { count.unmatched++; continue; }
-    count.matched++;
-    e.f[y <= HALF ? 0 : 1]++;
-    if (+r.VOLTAGE_1 === 11) e.f11++;
-    const g = group(r.CAUSE); e.groups[g] = (e.groups[g] || 0) + 1;
+    if (e) e.dist[d] = (e.dist[d] || 0) + 1;                     // every fault on the feeder votes for its district
+    if (String(r.EQUIPMENT_CODE) === '1') rows.push({ area, key, e, d, y, v: volt(r.VOLTAGE_1), day: String(r.HV_INCIDENT_TIME).slice(0, 10), cause: r.CAUSE });   // 1 = overhead lines
   }
 
   // 3. each feeder belongs to the district most of its faults name, or failing that its primary's
   const mode = o => o && Object.keys(o).length ? Object.entries(o).sort((a, b) => b[1] - a[1])[0][0] : null;
-  const D = {}; let kmNoDistrict = 0, fNoDistrict = 0;
-  for (const [key, e] of feeders) {
-    e.d = mode(e.dist) || mode(primDist.get(key.split(':').slice(0, 2).join(':')));
-    if (!e.d) { kmNoDistrict += e.km; fNoDistrict += e.f[0] + e.f[1]; continue; }
-    const o = D[e.d] || (D[e.d] = { km: 0, km11: 0, f: 0, f11: 0, groups: {}, feeders: 0 });
-    o.km += e.km; o.km11 += e.km11; o.f += e.f[0] + e.f[1]; o.f11 += e.f11; o.feeders++;
-    for (const [g, c] of Object.entries(e.groups)) o.groups[g] = (o.groups[g] || 0) + c;
+  for (const [key, e] of feeders) e.d = mode(e.dist) || mode(primDist.get(key.split(':').slice(0, 2).join(':')));
+
+  // 4. count overhead line faults. The headline is 11 kV faults on 11 kV line.
+  const days = []; for (let t = Date.UTC(YEARS[0], 0, 1); t <= Date.UTC(YEARS[1], 11, 31); t += 864e5) days.push(new Date(t).toISOString().slice(0, 10));
+  const dayIx = new Map(days.map((d, i) => [d, i])), nDays = days.length;
+  const D = {}, dist = k => D[k] || (D[k] = { km: 0, kmAll: 0, fAll: 0, f: 0, fdays: 0, own11: 0, ownMatched11: 0, groups: {}, feeders: 0, perDay: new Uint16Array(nDays) });
+  const volts = Object.fromEntries(VOLTS.map(v => [v, { km: 0, f: 0 }]));
+  for (const r of rows) {
+    count.overhead++;
+    if (r.v === '11') { count.overhead11++; dist(r.d).own11++; }
+    if (!r.e || !r.e.d) { if (r.v === '11') count.unmatched11++; continue; }
+    if (volts[r.v]) volts[r.v].f++;
+    const o = dist(r.e.d); o.fAll++;
+    if (r.v !== '11') continue;
+    count.matched11++; dist(r.d).ownMatched11++;
+    o.f++; o.perDay[dayIx.get(r.day)]++;
+    const g = group(r.cause); o.groups[g] = (o.groups[g] || 0) + 1;
+    r.e.f11 = (r.e.f11 || 0) + 1; r.e.half[r.y <= HALF ? 0 : 1]++;
+    if (r.e.days.has(r.day)) count.repeats11++; else { r.e.days.add(r.day); o.fdays++; }
   }
+  let kmNoDistrict = 0;
+  for (const e of feeders.values()) {
+    for (const v of VOLTS) volts[v].km += e.km[v] || 0;
+    if (!e.d) { kmNoDistrict += Object.values(e.km).reduce((a, b) => a + b, 0); continue; }
+    const o = dist(e.d); o.km += e.km['11'] || 0; o.kmAll += Object.values(e.km).reduce((a, b) => a + b, 0); if (e.km['11']) o.feeders++;
+  }
+
+  // 5. intervals: resample whole days, so one storm's faults move together
   const yrs = YEARS[1] - YEARS[0] + 1, rate = (f, km) => f / km * 100 / yrs;
-  const districts = Object.entries(D).map(([key, o]) => {
-    const [lo, hi] = poisson(o.f);
-    return { key, km: Math.round(o.km), feeders: o.feeders, faults: o.f, rate: r2(rate(o.f, o.km)), lo: r2(rate(lo, o.km)), hi: r2(rate(hi, o.km)),
-      km11: Math.round(o.km11), rate11: o.km11 > 0 ? r2(rate(o.f11, o.km11)) : null,
-      groups: Object.fromEntries([...GROUPS.map(([g]) => g), 'other'].map(g => [g, r2(rate(o.groups[g] || 0, o.km))])) };
+  const keys = Object.keys(D).filter(k => D[k].km > 0), sims = keys.map(() => new Float64Array(BOOT));
+  for (let b = 0; b < BOOT; b++) {
+    const tot = new Float64Array(keys.length);
+    for (let i = 0; i < nDays; i++) { const j = Math.floor(rng() * nDays); for (let k = 0; k < keys.length; k++) tot[k] += D[keys[k]].perDay[j]; }
+    for (let k = 0; k < keys.length; k++) sims[k][b] = tot[k];
+  }
+  const pctl = (arr, p) => { const a = Array.from(arr).sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(p * a.length))]; };
+
+  const districts = keys.map((key, k) => {
+    const o = D[key], match = o.own11 ? o.ownMatched11 / o.own11 : null;
+    return { key, km: Math.round(o.km), kmAll: Math.round(o.kmAll), feeders: o.feeders, faults: o.f, rate: r2(rate(o.f, o.km)),
+      lo: r2(rate(pctl(sims[k], 0.025), o.km)), hi: r2(rate(pctl(sims[k], 0.975), o.km)),
+      match: match == null ? null : r3(match), rateIfAllMatched: match ? r2(rate(o.f, o.km) / match) : null,
+      feederDays: o.fdays, rateDays: r2(rate(o.fdays, o.km)), faultsAll: o.fAll, rateAll: r2(rate(o.fAll, o.kmAll)),
+      groups: Object.fromEntries(GNAMES.map(g => [g, r2(rate(o.groups[g] || 0, o.km))])) };
   }).sort((a, b) => b.rate - a.rate);
 
-  // 4. network totals
+  // 6. network and licence-area totals
   const sum = (arr, f) => arr.reduce((a, x) => a + f(x), 0);
-  const tot = { km: sum(districts, d => d.km), faults: sum(districts, d => d.faults) };
-  const area = a => { const ds = districts.filter(d => d.key.startsWith(a)); return { km: sum(ds, d => d.km), faults: sum(ds, d => d.faults), rate: r2(rate(sum(ds, d => d.faults), sum(ds, d => d.km))) }; };
-  const groupsAll = Object.fromEntries([...GROUPS.map(([g]) => g), 'other'].map(g => [g, r2(sum(districts, d => d.groups[g] * d.km) / tot.km)]));
+  const tot = { km: sum(districts, d => d.km), faults: sum(districts, d => d.faults), feederDays: sum(districts, d => d.feederDays) };
+  tot.rate = r2(rate(tot.faults, tot.km)); tot.rateDays = r2(rate(tot.feederDays, tot.km));
+  const area = a => { const ds = districts.filter(d => d.key.startsWith(a)); const km = sum(ds, d => d.km), f = sum(ds, d => d.faults), kmAll = sum(ds, d => d.kmAll), fAll = sum(ds, d => d.faultsAll);
+    return { km, faults: f, rate: r2(rate(f, km)), kmAll, rateAll: r2(rate(fAll, kmAll)) }; };
+  const groupsAll = Object.fromEntries(GNAMES.map(g => [g, r2(sum(districts, d => d.groups[g] * d.km) / tot.km)]));
+  const voltRates = VOLTS.map(v => ({ v, km: Math.round(volts[v].km), faults: volts[v].f, rate: volts[v].km ? r2(rate(volts[v].f, volts[v].km)) : null }));
 
-  // 5. persistence: rank feeders on 2016-2020, then see how many 2021-2025 faults land on the worst tenth of line
-  const F = [...feeders.values()].filter(e => e.km >= MIN_KM).map(e => ({ km: e.km, a: e.f[0], b: e.f[1], ra: e.f[0] / e.km }));
-  F.sort((x, y) => y.ra - x.ra);
-  const kmF = sum(F, e => e.km), aF = sum(F, e => e.a), bF = sum(F, e => e.b);
-  const slice = share => { let km = 0; const out = []; for (const e of F) { if (km >= share * kmF) break; out.push(e); km += e.km; } return out; };
-  const persist = [0.1, 0.25, 0.5].map(sh => { const t = slice(sh); return { lineShare: r2(sum(t, e => e.km) / kmF), first: r2(sum(t, e => e.a) / aF), second: r2(sum(t, e => e.b) / bF) }; });
-  // rate spread across feeders, faults per 100 km a year over the whole decade
+  // 7. persistence: rank feeders on 2016-2020, then see how many 2021-2025 faults land on the worst share of line
+  const F = [...feeders.values()].filter(e => (e.km['11'] || 0) >= MIN_KM && e.d).map(e => ({ d: e.d, km: e.km['11'], a: e.half[0], b: e.half[1], ra: e.half[0] / e.km['11'] }));
+  const persistOf = (list, sh) => {
+    const sorted = [...list].sort((x, y) => y.ra - x.ra), K = sum(sorted, e => e.km); let km = 0; const t = [];
+    for (const e of sorted) { if (km >= sh * K) break; t.push(e); km += e.km; }
+    return { km: sum(t, e => e.km), a: sum(t, e => e.a), b: sum(t, e => e.b) };
+  };
+  const aF = sum(F, e => e.a), bF = sum(F, e => e.b), kmF = sum(F, e => e.km);
+  const persist = [0.1, 0.25, 0.5].map(sh => { const p = persistOf(F, sh); return { lineShare: r2(p.km / kmF), first: r2(p.a / aF), second: r2(p.b / bF) }; });
+  // the same test inside each district, so it cannot just be picking out tree-heavy districts
+  const byD = {}; for (const e of F) (byD[e.d] = byD[e.d] || []).push(e);
+  const within = Object.values(byD).map(list => persistOf(list, 0.1));
+  const withinDistrict = { lineShare: r2(sum(within, p => p.km) / kmF), second: r2(sum(within, p => p.b) / bF) };
   const spread = F.map(e => (e.a + e.b) / e.km * 100 / yrs).sort((x, y) => x - y), q = p => r1(spread[Math.floor(p * (spread.length - 1))]);
   const BINS = [0, 2, 4, 6, 8, 10, 12, 15, 20, 30, Infinity];
   const hist = BINS.slice(0, -1).map((lo, i) => ({ lo, hi: Number.isFinite(BINS[i + 1]) ? BINS[i + 1] : null, feeders: spread.filter(v => v >= lo && v < BINS[i + 1]).length }));
 
+  // 8. how bunched are faults? share on the busiest 1% of days
+  const allDays = new Float64Array(nDays); for (const k of keys) D[k].perDay.forEach((c, i) => allDays[i] += c);
+  const busiest = Array.from(allDays).sort((a, b) => b - a), top1 = sum(busiest.slice(0, Math.round(nDays / 100)), x => x) / sum(busiest, x => x);
+
   return {
-    computed: new Date().toISOString(), years: YEARS, half: HALF, minKm: MIN_KM,
+    computed: new Date().toISOString(), years: YEARS, half: HALF, minKm: MIN_KM, boot: BOOT, northFrom: NORTH_FROM,
     sources: { lines: { name: lineRes.name, modified: lineRes.last_modified || lineRes.metadata_modified }, faults: [mn.result, ms.result].map(r => ({ name: r.name, modified: r.last_modified || r.metadata_modified })) },
-    lines: { segments: lines.length, km: Math.round(sum(Object.values(byVoltage), x => x)), byVoltage: Object.fromEntries(Object.entries(byVoltage).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, Math.round(v)])),
-      feeders: feeders.size, noFeeder: skipped.noFeeder, noFeederKm: Math.round(skipped.km), noDistrictKm: Math.round(kmNoDistrict), noDistrictFaults: fNoDistrict },
-    faults: count, total: { km: tot.km, faults: tot.faults, rate: r2(rate(tot.faults, tot.km)) }, areas: { SHEPD: area('SHEPD'), SEPD: area('SEPD') }, groups: groupsAll,
-    districts, feederTest: { feeders: F.length, km: Math.round(kmF), persist, median: q(0.5), p10: q(0.1), p90: q(0.9), hist }
+    lines: { segments: lines.length, km: Math.round(sum(Object.values(byVoltage), x => x)), byAreaVoltage: Object.fromEntries(Object.entries(byVoltage).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, Math.round(v)])),
+      feeders: feeders.size, noFeeder: skipped.noFeeder, noFeederKm: Math.round(skipped.km), noDistrictKm: Math.round(kmNoDistrict) },
+    faults: count, total: tot, areas: { SHEPD: area('SHEPD'), SEPD: area('SEPD') }, voltages: voltRates, groups: groupsAll, busiestDayShare: r3(top1),
+    districts, feederTest: { feeders: F.length, km: Math.round(kmF), persist, withinDistrict, median: q(0.5), p10: q(0.1), p90: q(0.9), hist }
   };
 }
-run().then(r => { window._result = r; const s = JSON.stringify(r); document.body.textContent = `done: ${r.districts.length} districts, ${r.total.faults} faults on ${r.total.km} km, ${(s.length / 1024).toFixed(0)} KB\n\n` + JSON.stringify(r, null, 1); })
+run().then(r => { window._result = r; const s = JSON.stringify(r); document.body.textContent = `done: ${r.districts.length} districts, ${r.total.faults} faults on ${r.total.km} km of 11 kV line, ${(s.length / 1024).toFixed(0)} KB\n\n` + JSON.stringify(r, null, 1); })
   .catch(e => { window._error = String(e); document.body.textContent = 'failed: ' + e; });
 </script>
