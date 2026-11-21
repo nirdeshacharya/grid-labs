@@ -1,0 +1,88 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Entry 07 analysis run</title>
+<!-- Reproduces the figures in entry 07. Steps:
+     1. python3 -m http.server 5179           (from the repository root)
+     2. open http://localhost:5179/analysis/07-run.html and save the JSON into data/07-scenarios.json
+     It compares what SSEN's 2020 scenarios (FES 2020, by output area, four scenarios) projected for 2023 with
+     the baseline SSEN's DFES 2024 later measured for the end of 2023, for domestic heat pumps and home EV chargers.
+     Three of the 2020 files are spreadsheets only, so SheetJS reads them here. -->
+<body style="font:13px ui-monospace,Menlo,monospace;white-space:pre-wrap;padding:16px">running…
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="../lab.js"></script>
+<script>
+const DATASET = 'low_carbon_technologies';
+const YEARS = [2019, 2020, 2021, 2022, 2023, 2024, 2025], TEST_YEAR = 2023;   // DFES 2024 "defines the baseline year as the end of the 2023 calendar year"
+const DFES24 = { SEPD: /DFES SEPD 2024 Technology Projections Local Authority/i, SHEPD: /DFES SHEPD 2024 Technology Projections Local Authority/i };
+// what each comparison counts in each edition
+const MEASURES = {
+  hp: { label: 'Domestic heat pumps', fes: s => /^Domestic_(electric|gas_back-up)$/.test(s), dfes: r => r.Technology === 'Domestic heat pumps' },
+  hybrid: { label: 'Hybrid heat pumps', fes: s => s === 'Domestic_gas_back-up', dfes: r => r.Technology === 'Domestic heat pumps' && r.Subtechnology === 'Hybrid' },
+  chargers: { label: 'Home EV chargers', fes: s => s === 'Off-street', dfes: r => r.Technology === 'EV chargers' && r.Subtechnology === 'Domestic off-street with charger' },
+};
+// council areas renamed or merged between the two editions
+const MERGE = { 'Mendip': 'Somerset', 'South Somerset': 'Somerset', 'Sedgemoor': 'Somerset', 'Taunton Deane': 'Somerset', 'West Somerset': 'Somerset', 'Somerset West and Taunton': 'Somerset', 'South Northamptonshire': 'West Northamptonshire' };
+const la = n => MERGE[n] || n;
+const r0 = x => Math.round(x);
+
+async function fesRows(r) {
+  if (r.datastore_active) return fetchAll(r.id, ['Sub-technology', 'Scenario', 'ladnm', ...YEARS.map(y => y + '.0')]).then(rows => rows.map(x => ({ sub: x['Sub-technology'], scen: x.Scenario, la: x.ladnm, v: YEARS.map(y => +x[y + '.0'] || 0) })));
+  const buf = await fetch(r.url).then(x => { if (!x.ok) throw new Error(r.name + ' ' + x.status); return x.arrayBuffer(); });
+  const wb = XLSX.read(buf, { type: 'array' });
+  // the workbook opens on a cover sheet; use the sheet whose rows carry the projection columns
+  const sheets = wb.SheetNames.map(n => XLSX.utils.sheet_to_json(wb.Sheets[n], { defval: null }));
+  const data = sheets.filter(rows => rows.length && 'Sub-technology' in rows[0]).sort((a, b) => b.length - a.length)[0];
+  if (!data) throw new Error(r.name + ': no sheet with a Sub-technology column (' + wb.SheetNames.join(', ') + ')');
+  return data.map(x => {
+    const val = y => +(x[y] ?? x[y + '.0'] ?? x[String(y)]) || 0;
+    return { sub: x['Sub-technology'], scen: x.Scenario, la: x.ladnm, v: YEARS.map(val) };
+  });
+}
+
+async function run() {
+  const res = (await getJSON(CKAN + 'package_show?id=' + DATASET)).result.resources;
+  const fesFiles = res.filter(r => /FES2020/.test(r.name));
+  const out = { computed: new Date().toISOString(), years: YEARS, testYear: TEST_YEAR, sources: [], areas: {} };
+  const F = {}, FLA = {};   // F[area][measure][scenario] = yearly totals; FLA[area][measure][scenario][la] = test-year value
+  for (const r of fesFiles) {
+    const area = /^SEPD/.test(r.name) ? 'SEPD' : 'SHEPD', kinds = /HP/.test(r.name) ? ['hp', 'hybrid'] : ['chargers'];
+    const rows = await fesRows(r);
+    out.sources.push({ name: r.name, modified: r.last_modified || r.metadata_modified, rows: rows.length, via: r.datastore_active ? 'API' : 'spreadsheet' });
+    for (const x of rows) for (const kind of kinds) {
+      if (!MEASURES[kind].fes(x.sub)) continue;
+      const f = ((F[area] = F[area] || {})[kind] = F[area][kind] || {})[x.scen] = F[area][kind][x.scen] || YEARS.map(() => 0);
+      x.v.forEach((v, i) => f[i] += v);
+      const g = (((FLA[area] = FLA[area] || {})[kind] = FLA[area][kind] || {})[x.scen] = FLA[area][kind][x.scen] || {});
+      g[la(x.la)] = (g[la(x.la)] || 0) + x.v[YEARS.indexOf(TEST_YEAR)];
+    }
+  }
+  for (const [area, re] of Object.entries(DFES24)) {
+    const r = res.find(r => re.test(r.name)); out.sources.push({ name: r.name, modified: r.last_modified || r.metadata_modified });
+    const rows = await fetchAll(r.id, ['Local_authority', 'Technology', 'Subtechnology', 'Scenario', 'Baseline', 'unsafe_2025']);
+    const A = out.areas[area] = {};
+    for (const [kind, m] of Object.entries(MEASURES)) {
+      const sel = rows.filter(m.dfes), scen = [...new Set(sel.map(x => x.Scenario))];
+      // the baseline is the same in every scenario; take it from Holistic Transition, which entry 04 uses
+      const base = sel.filter(x => x.Scenario === 'Holistic Transition');
+      const measured = base.reduce((a, x) => a + (+x.Baseline || 0), 0);
+      const byLa = {}; for (const x of base) byLa[la(x.Local_authority)] = (byLa[la(x.Local_authority)] || 0) + (+x.Baseline || 0);
+      const scenarios = Object.fromEntries(Object.entries(F[area]?.[kind] || {}).map(([s, v]) => [s, v.map(r0)]));
+      const councils = Object.entries(byLa).filter(([n, v]) => v > 0 && FLA[area]?.[kind]?.['Consumer Transformation']?.[n] != null).map(([n, v]) => ({
+        n, measured: r0(v), ...Object.fromEntries(Object.entries(FLA[area][kind]).map(([s, g]) => [s, r0(g[n] || 0)])) })).sort((a, b) => b.measured - a.measured);
+      const unmatched = Object.keys(byLa).filter(n => byLa[n] > 0 && FLA[area]?.[kind]?.['Consumer Transformation']?.[n] == null);
+      A[kind] = { label: m.label, measured: r0(measured), scenarios,
+        dfes2025: Object.fromEntries(scen.map(s => [s, r0(sel.filter(x => x.Scenario === s).reduce((a, x) => a + (+x.unsafe_2025 || 0), 0))])).valueOf(),
+        councils, unmatchedCouncils: unmatched,
+        unmatchedShare: Math.round(unmatched.reduce((a, n) => a + byLa[n], 0) / measured * 1000) / 10 };
+    }
+  }
+  // SSEN's own records of heat pumps and EV chargers connected, by primary substation (SHEPD primaries are numbered below 1000)
+  const lctPkg = (await getJSON(CKAN + 'package_show?id=low-carbon-technology-connections')).result.resources.find(r => r.datastore_active && /CSV/i.test(r.format));
+  const lct = await fetchAll(lctPkg.id, ['PRIMARY_NRN', 'LCT', 'count_LCT']);
+  out.records = { name: lctPkg.name, modified: lctPkg.last_modified || lctPkg.metadata_modified, SEPD: {}, SHEPD: {} };
+  for (const r of lct) { const a = r.PRIMARY_NRN < 1000 ? 'SHEPD' : 'SEPD', k = r.LCT === 'HP' ? 'hp' : r.LCT === 'EV' ? 'chargers' : null; if (k) out.records[a][k] = (out.records[a][k] || 0) + (+r.count_LCT || 0); }
+  return out;
+}
+run().then(r => { window._result = r; const s = JSON.stringify(r); document.body.textContent = `done, ${(s.length / 1024).toFixed(0)} KB\n\n` + JSON.stringify(r, null, 1); })
+  .catch(e => { window._error = String(e); document.body.textContent = 'failed: ' + e; });
+</script>

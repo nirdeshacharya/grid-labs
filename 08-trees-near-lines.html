@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trees near lines · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart text { font: 11px var(--mono); fill: var(--ink-3); }
+  .chart .grid { stroke: var(--rule); }
+  .chart .s { fill: var(--s2); }
+  .chart .n { fill: var(--s1); }
+  .chart .lbl { font: 11px var(--sans); fill: var(--ink-2); }
+  .split { display: grid; grid-template-columns: minmax(130px, 220px) 1fr 50px; gap: 6px 10px; align-items: center; font-size: 13px; margin: 8px 0; }
+  .split .lab { color: var(--ink-2); }
+  .split .trk { display: flex; height: 16px; background: var(--fill); border-radius: 2px; overflow: hidden; }
+  .split .trk i { display: block; height: 100%; }
+  .split .val { font: 12px var(--mono); text-align: right; }
+  @media (max-width: 560px) { .split { grid-template-columns: 1fr 44px; } .split .lab { grid-column: 1 / -1; margin-top: 4px; } }
+</style>
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a></nav></div></header>
+<main>
+  <div class="entry">Entry 08 <span class="status finding">Finding</span> <span class="small">· posted 21 November 2026</span></div>
+  <h1>Do trees near lines explain the south's higher fault rate?</h1>
+  <p class="lede">A satellite map of tree cover, read every 100 m along 32,000 km of 11 kV overhead line, set against ten years of faults SSEN put down to trees.</p>
+  <p>Entry 05 found southern England's 11 kV lines fault about two-fifths more often per kilometre than the north of Scotland's, and that trees cause most of the difference. The obvious explanation is that the south's lines run past more trees. This entry measures that.</p>
+  <div id="out"><p class="loading">Loading the data…</p></div>
+  <footer>Part of <a href="./">Grid Labs</a>. A personal project, built in my own time from public open data. Not an SSEN product and not SSEN's view. This is a statistical comparison of published records and satellite land cover, not an engineering assessment of any circuit.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+const DISTRICT = { 'N/EAST': 'North East Scotland', HIGH: 'Highland', TAYCEN: 'Tayside and Central', ARGYLL: 'Argyll and West Highland', SHET: 'Shetland', WISLES: 'Western Isles', ORKN: 'Orkney',
+  POOL: 'Poole', MELK: 'Melksham', OXFN: 'Oxford North', SWIN: 'Swindon', OXFS: 'Oxford South', NEWF: 'New Forest', PETE: 'Petersfield', BASI: 'Basingstoke', REAN: 'Reading North', ALDE: 'Aldershot',
+  REAS: 'Reading South', CHIC: 'Chichester', SALI: 'Salisbury', SLOU: 'Slough', YEOV: 'Yeovil', NEWB: 'Newbury', BOUR: 'Bournemouth', BRAC: 'Bracknell', ANDO: 'Andover', PORT: 'Portsmouth',
+  ISLE: 'Isle of Wight', SOTN: 'Southampton', WLON: 'West London', EGHA: 'Egham' };
+const name = k => DISTRICT[k.split('/').slice(1).join('/')] || k;
+const N = (v, d = 0) => `<b class="n">${fmt(v, d)}</b>`;
+const pct = (v, d = 0) => `<b class="n">${fmt(v * 100, d)}%</b>`;
+const band = b => `${fmt(b.lo * 100)}${b.hi >= 1 ? '%+' : `–${fmt(b.hi * 100)}%`}`;
+
+function bandChart(R) {
+  const S = R.bins.find(b => b.area === 'SEPD').bins, Nb = R.bins.find(b => b.area === 'SHEPD').bins;
+  const W = 680, H = 250, L = 34, Rr = 8, T = 12, B = 40, n = S.length, gw = (W - L - Rr) / n, bw = gw * 0.34;
+  const vmax = Math.ceil(Math.max(...S.concat(Nb).map(b => b.treeRate || 0)) / 2) * 2, y = v => H - B - v / vmax * (H - T - B);
+  const bar = (b, i, off, cls, area) => b.treeRate == null ? '' : `<rect class="${cls}" x="${L + i * gw + gw / 2 + off}" y="${y(b.treeRate)}" width="${bw}" height="${H - B - y(b.treeRate)}" rx="1" data-tip="${area}, ${band(b)} tree cover beside the line\n${fmt(b.km)} km on ${fmt(b.feeders)} feeders\n${fmt(b.treeRate, 2)} tree faults per 100 km a year\n${fmt(b.rate, 1)} faults of all causes"/>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Tree faults per 100 km by tree cover beside the line, south and north">
+    ${Array.from({ length: vmax / 2 + 1 }, (_, i) => i * 2).map(v => `<line class="grid" x1="${L}" x2="${W - Rr}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join('')}
+    ${S.map((b, i) => bar(b, i, -bw - 1, 's', 'Southern England') + bar(Nb[i], i, 1, 'n', 'North of Scotland') + `<text x="${L + i * gw + gw / 2}" y="${H - B + 16}" text-anchor="middle">${band(b)}</text><text x="${L + i * gw + gw / 2}" y="${H - B + 30}" text-anchor="middle" style="font-size:9.5px">${fmt(b.km + Nb[i].km)} km</text>`).join('')}
+  </svg>`;
+}
+function scatter(R) {
+  const W = 680, H = 300, L = 40, Rr = 12, T = 12, B = 34, ds = R.districts;
+  const xmax = Math.ceil(Math.max(...ds.map(d => d.treeShare)) * 10) / 10, ymax = Math.ceil(Math.max(...ds.map(d => d.treeRate)) / 2) * 2;
+  const x = v => L + v / xmax * (W - L - Rr), y = v => H - B - v / ymax * (H - T - B);
+  const show = new Set(ds.filter(d => d.treeRate > 6 || /ARGYLL|SHET|HIGH|N\/EAST/.test(d.key) || d.treeShare > 0.3).map(d => d.key));
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Districts: tree cover beside lines against tree faults per 100 km">
+    ${Array.from({ length: ymax / 2 + 1 }, (_, i) => i * 2).map(v => `<line class="grid" x1="${L}" x2="${W - Rr}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join('')}
+    ${Array.from({ length: Math.round(xmax * 10) + 1 }, (_, i) => i / 10).map(v => `<text x="${x(v)}" y="${H - B + 16}" text-anchor="middle">${fmt(v * 100)}%</text>`).join('')}
+    <text x="${W - Rr}" y="${H - 4}" text-anchor="end">tree cover beside the line</text>
+    ${ds.map(d => `<circle class="${d.key.startsWith('SEPD') ? 's' : 'n'}" cx="${x(d.treeShare)}" cy="${y(d.treeRate)}" r="${3 + Math.sqrt(d.km) / 12}" fill-opacity=".85" data-tip="${esc(name(d.key))}\n${fmt(d.km)} km of 11 kV overhead line\n${fmt(d.treeShare * 100)}% tree cover beside it\n${fmt(d.treeRate, 2)} tree faults per 100 km a year"/>${show.has(d.key) ? `<text class="lbl" x="${x(d.treeShare) + 7}" y="${y(d.treeRate) + 4}">${esc(name(d.key))}</text>` : ''}`).join('')}
+  </svg>`;
+}
+
+function render(R) {
+  const S = R.areas.SEPD, Nn = R.areas.SHEPD, gap = S.treeRate - Nn.treeRate, V = R.sensitivity;
+  const lo = (S.treeRate - R.standard.southAtNorthCover) / gap, hi = (R.standard.northAtSouthCover - Nn.treeRate) / gap;
+  const expl = [Math.min(lo, hi), Math.max(lo, hi)];
+  const Sb = R.bins.find(b => b.area === 'SEPD').bins, Nb = R.bins.find(b => b.area === 'SHEPD').bins;
+  const mid = Sb.findIndex(b => b.lo === 0.2), top = Sb.length - 1;
+  const islands = R.districts.filter(d => /SHET|ORKN|WISLES/.test(d.key)), argyll = R.districts.find(d => /ARGYLL/.test(d.key));
+  const twin = R.districts.filter(d => d.key.startsWith('SEPD') && Math.abs(d.treeShare - argyll.treeShare) < 0.03);
+  const w = v => Math.max(0, v) / S.treeRate * 100;
+
+  $('#out').innerHTML = `
+  <p class="snapshot">Snapshot: computed ${day(R.computed)} from SSEN's overhead line routes and fault records for ${R.years[0]} to ${R.years[1]}, and ESA WorldCover 2021.</p>
+
+  <h2>Short answer</h2>
+  <div class="answer">
+    <p>Only partly. Southern 11 kV lines do run past more trees: ${pct(S.treeShare)} of the ground beside them is tree cover, against ${pct(Nn.treeShare)} in the north. But that explains roughly ${pct(expl[0])} to ${pct(expl[1])} of the gap in tree faults. With the same tree cover beside the line, southern lines still have about twice as many tree faults as northern ones, and most of theirs happen in calm weather rather than storms.</p>
+  </div>
+  <p>The clearest difference is in trees growing into the line rather than falling on it. Southern lines have ${N(V.growing.south, 2)} of those faults per 100 km a year, the north ${N(V.growing.north, 2)}: about ${fmt(V.growing.south / V.growing.north, 0)} times as many. Tree cover explains little of that (${pct(V.growing.explained[0])} to ${pct(V.growing.explained[1])}), and that kind of fault alone makes up about ${pct((V.growing.south - V.growing.north) / gap)} of the whole tree-fault gap.</p>
+  <p>Where 20 to 30% of the ground beside the line is tree cover, southern lines have ${N(Sb[mid].treeRate, 1)} tree faults per 100 km a year and northern lines ${N(Nb[mid].treeRate, 1)}. In the most wooded band the gap widens to ${N(Sb[top].treeRate, 1)} against ${N(Nb[top].treeRate, 1)}. More trees means more tree faults in both areas, but each extra tree seems to matter more in the south.</p>
+
+  <h2>Same tree cover, different fault rates</h2>
+  <div class="key"><span><i class="sq" style="background:var(--s2)"></i>Southern England</span><span><i class="sq" style="background:var(--s1)"></i>North of Scotland</span></div>
+  <figure class="chart">${bandChart(R)}
+    <figcaption>Faults SSEN put down to trees, per 100 km of 11 kV overhead line per year, ${R.years[0]} to ${R.years[1]}. Feeders are grouped by how much of the ground within about ${R.squareM / 2} m of their lines is tree cover. The figure under each band is the line length in it.</figcaption>
+  </figure>
+
+  <h2>How much of the gap is more trees?</h2>
+  <div class="split">
+    <span class="lab">Southern England</span><span class="trk"><i style="width:${w(R.standard.southAtNorthCover)}%;background:var(--s2);opacity:.55" data-tip="What southern lines would see with northern tree cover"></i><i style="width:${w(S.treeRate - R.standard.southAtNorthCover)}%;background:var(--s2)" data-tip="Extra from having more trees beside the line"></i></span><span class="val">${fmt(S.treeRate, 2)}</span>
+    <span class="lab">South with the north's tree cover</span><span class="trk"><i style="width:${w(R.standard.southAtNorthCover)}%;background:var(--s2);opacity:.55"></i></span><span class="val">${fmt(R.standard.southAtNorthCover, 2)}</span>
+    <span class="lab">North of Scotland</span><span class="trk"><i style="width:${w(Nn.treeRate)}%;background:var(--s1)"></i></span><span class="val">${fmt(Nn.treeRate, 2)}</span>
+  </div>
+  <p class="small">Tree faults per 100 km a year. The middle row applies the south's rate in each tree-cover band to the north's mix of bands. Doing it the other way, the north with the south's tree cover, gives ${fmt(R.standard.northAtSouthCover, 2)}. The two give the range in the short answer.</p>
+
+  <h2>Calm days or storms?</h2>
+  <div class="split">${['SEPD', 'SHEPD'].map(a => { const g = R.byGust[a], t = g.calm + g.mid + g.windy; return `<span class="lab">${a === 'SEPD' ? 'Southern England' : 'North of Scotland'}</span><span class="trk"><i style="width:${g.calm / t * 100}%;background:var(--good)" data-tip="Gusts under 30 mph: ${fmt(g.calm)} tree faults"></i><i style="width:${g.mid / t * 100}%;background:var(--na)" data-tip="30 to 50 mph: ${fmt(g.mid)}"></i><i style="width:${g.windy / t * 100}%;background:var(--crit)" data-tip="50 mph and over: ${fmt(g.windy)}"></i></span><span class="val">${fmt(t)}</span>`; }).join('')}</div>
+  <div class="key"><span><i class="sq" style="background:var(--good)"></i>Calm, gusts under 30 mph</span><span><i class="sq" style="background:var(--na)"></i>30 to 50 mph</span><span><i class="sq" style="background:var(--crit)"></i>50 mph and over</span></div>
+  <p>${(g => `${pct(g.calm / (g.calm + g.mid + g.windy))} of southern tree faults happened on calm days and ${pct(g.windy / (g.calm + g.mid + g.windy))} in gales`)(R.byGust.SEPD)}. ${(g => `In the north it is the other way round: ${pct(g.calm / (g.calm + g.mid + g.windy))} on calm days and ${pct(g.windy / (g.calm + g.mid + g.windy))} in gales`)(R.byGust.SHEPD)}, and northern tree faults jump in the big storm years (${Object.entries(R.byYear.SHEPD).filter(([, v]) => v > 450).map(([y]) => y).join(', ')}). The south's extra tree faults are mostly not storms. They are trees reaching or dropping onto lines in ordinary weather, where tree cutting and line design would make the most difference.</p>
+  <p class="small">Daily maximum gust for each fault's district, from the ERA5 data used in entry 02.</p>
+
+  <h2>District by district</h2>
+  <figure class="chart">${scatter(R)}
+    <figcaption>Each circle is a district with at least 200 km of 11 kV overhead line, sized by line length. Orange: southern England. Blue: north of Scotland.</figcaption>
+  </figure>
+  <ul>
+    <li>The island groups make a useful check. ${islands.map(d => esc(name(d.key))).join(', ')} have almost no tree cover beside their lines (${islands.map(d => fmt(d.treeShare * 100, 1) + '%').join(', ')}) and almost no tree faults, as they should.</li>
+    <li>${esc(name(argyll.key))} has ${pct(argyll.treeShare)} tree cover beside its lines but only ${N(argyll.treeRate, 1)} tree faults per 100 km a year. The ${fmt(twin.length)} southern districts with similar tree cover, within 3 points, have ${fmt(Math.min(...twin.map(d => d.treeRate)), 1)} to ${fmt(Math.max(...twin.map(d => d.treeRate)), 1)}.</li>
+    <li>Within each area, feeders with more trees beside them do have more tree faults: the rank correlation is ${N(R.corr.SEPD, 2)} in the south and ${N(R.corr.SHEPD, 2)} in the north.</li>
+  </ul>
+
+  <h2>What else could explain it</h2>
+  <p>This data cannot say, but the candidates are worth naming. Woodland in southern England is mostly broadleaved, and more of it may sit in hedgerows and gardens right beside the line; in the north of Scotland much of it is conifer plantation. Trees may also grow back faster in a milder climate, which would fit the gap in growing-tree faults. Tree cutting cycles, conductor types and how much line is covered rather than bare may differ too. Any of these would make each tree beside a southern line more likely to cause a fault.</p>
+
+  <h2>Checks</h2>
+  <ul>
+    <li>Does the size of the square matter? A ${R.wideM} m square gives ${pct(V.treeShare2.SEPD)} and ${pct(V.treeShare2.SHEPD)} tree cover, and tree cover explains ${pct(V.wider.explained[0])} to ${pct(V.wider.explained[1])} of the gap. The single ${R.pixelM} m pixel under the line gives ${pct(V.treeShare0.SEPD)} and ${pct(V.treeShare0.SHEPD)}, and ${pct(V.pixel.explained[0])} to ${pct(V.pixel.explained[1])}. Much the same each way.</li>
+    <li>Could northern tree faults be recorded under other causes? If they were, wooded northern feeders would show more faults of all causes. They do not: from the least wooded band to the most, northern lines have ${fmt(Math.min(...Nb.map(b => b.rate)), 1)} to ${fmt(Math.max(...Nb.map(b => b.rate)), 1)} faults of all causes per 100 km a year, with no rise. Southern lines rise from ${fmt(Sb[0].rate, 1)} to ${fmt(Sb[top].rate, 1)}.</li>
+    <li>Is it a recent rise, such as ash dieback? Southern tree faults go up and down from year to year, between ${fmt(Math.min(...Object.values(R.byYear.SEPD)))} and ${fmt(Math.max(...Object.values(R.byYear.SEPD)))}, without a steady climb.</li>
+    <li>Falling trees on their own: ${fmt(V.falling.south, 2)} against ${fmt(V.falling.north, 2)} faults per 100 km a year, with tree cover explaining ${pct(V.falling.explained[0])} to ${pct(V.falling.explained[1])} of the gap. More trees matter more for falling trees than for growing ones, as you would expect.</li>
+    <li>Sample size: ${fmt(R.sampling.points)} points along ${fmt(S.km + Nn.km)} km of 11 kV overhead line on ${fmt(R.sampling.feeders)} feeders with at least ${R.minKm} km of line.</li>
+    <li>${N(R.sampling.matched)} of ${fmt(R.sampling.overhead)} 11 kV overhead line faults match a feeder in the line data, as in entry 05.</li>
+  </ul>
+
+  <h2>Method</h2>
+  <ol>
+    <li>Take every 11 kV overhead line segment from SSEN's line data and group it by feeder, as in entry 05.</li>
+    <li>Place a point every ${R.stepM} m along each segment, using its latitude and longitude route.</li>
+    <li>At each point, read ESA WorldCover 2021 land cover at its full ${R.pixelM} m resolution in a ${R.squareM} m square, roughly the line and a strip either side, and record the share of that square classed as tree cover.</li>
+    <li>Average over each feeder's points to get its tree cover beside the line, then group feeders into bands.</li>
+    <li>Count each feeder's 11 kV overhead line faults whose recorded cause mentions trees (falling live and dead trees, and growing trees), ${R.years[0]} to ${R.years[1]}, less planned records.</li>
+  </ol>
+
+  <h2>What this cannot tell you</h2>
+  <ul>
+    <li>Satellite land cover at ${R.pixelM} m still misses single trees and narrow hedgerows, which are common beside southern lines. If the south has more of those, it has more trees near its lines than this measures, and more of the gap is about trees than the range above suggests.</li>
+    <li>Tree height is not known, and nor is how wide a strip has been cleared beside each line. A tree ${R.squareM / 2} m away from a cleared corridor counts the same as one touching the wires.</li>
+    <li>Tree cover is averaged over each feeder. A long northern feeder that crosses open moor and one dense plantation can average the same as a southern feeder with trees along its whole length, and SSEN's fault records do not say where on a feeder a fault happened.</li>
+    <li>WorldCover shows 2021; the faults run from ${R.years[0]} to ${R.years[1]}, and lines are today's.</li>
+    <li>"Tree" faults follow SSEN's recorded cause. A storm that brings down a tree may be recorded as wind instead.</li>
+    <li>It cannot see tree cutting, conductor type or species.</li>
+  </ul>
+
+  <h2>Data and reproduction</h2>
+  <p>Overhead lines: <b>${esc(R.sources.lines.name)}</b>, updated ${day(R.sources.lines.modified)}. Fault records: ${R.sources.faults.map((s, i) => `<b>${esc(s.name)}</b> (${['north of Scotland', 'southern England'][i]}), updated ${day(s.modified)}`).join('; ')}. SSEN Distribution open data. Land cover: <a href="https://esa-worldcover.org">ESA WorldCover</a> 10 m 2021 v200, © ESA WorldCover project, contains modified Copernicus Sentinel data (2021), CC BY 4.0.</p>
+  <p>The result file is <a href="data/08-trees.json">data/08-trees.json</a>. The scripts are in the <a href="https://github.com/nirdeshacharya/grid-labs/tree/main/analysis">analysis folder</a>: <span class="n">08-run.html</span> does the work in a browser, with <span class="n">worldcover_proxy.py</span> letting it read the WorldCover tiles.</p>`;
+}
+getJSON('data/08-trees.json?v=3').then(render).catch(e => { $('#out').innerHTML = `<p class="err">The result file could not be loaded: ${esc(e.message)}.</p>`; });
+</script>
+</body>
+</html>

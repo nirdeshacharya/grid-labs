@@ -1,0 +1,154 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Entry 08 analysis run</title>
+<!-- Reproduces the figures in entry 08. Steps:
+     1. python3 -m http.server 5179           (from the repository root)
+     2. python3 analysis/worldcover_proxy.py  (lets the browser read ESA WorldCover tiles; listens on 5181)
+     3. open http://localhost:5179/analysis/08-run.html and save the JSON into data/08-trees.json
+     It puts a point every 100 m along every 11 kV overhead line in SSEN's line data, reads ESA WorldCover 2021
+     (land cover at 10 m) in a 30 m square around each point, and measures how much of that square is tree cover.
+     Faults are matched to feeders as in entry 05; daily gusts come from entry 02's weather cache (fetch_wind.py). -->
+<body style="font:13px ui-monospace,Menlo,monospace;white-space:pre-wrap;padding:16px">running…
+<script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+<script src="../lab.js"></script>
+<script>
+const LINES = 'ssen_overhead_lines';
+const HV = { SHEPD: '245d5825-7d83-4d17-a2c5-04b473b9b408', SEPD: 'f0d9d3fe-6739-4700-a699-f227b4e1de41' };
+const PROXY = 'http://127.0.0.1:5181/v200/2021/map/';
+const LEVEL = 0;            // WorldCover at full 10 m resolution, so hedgerows and single rows of trees are not averaged away
+const STEP_M = 100;         // a sample point every 100 m of line
+const HALF = 1;             // 3 x 3 pixels around each point: a 30 m square, roughly the line and the strip either side of it
+const WIDE = 2;             // 5 x 5 pixels: a 50 m square, for comparison
+const TREE = 10;            // WorldCover class: tree cover
+const YEARS = [2016, 2025], PLANNED = new Set(['75', '86']), NORTH_FROM = 550000, MIN_KM = 5;
+const BINS = [0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 1.01];
+const status = t => { document.body.textContent = t; };
+const r2 = x => Math.round(x * 100) / 100, r3 = x => Math.round(x * 1000) / 1000;
+
+// points every STEP_M along a WGS84 polyline (equirectangular distances are fine at this scale)
+function sample(coords) {
+  const out = []; let carry = STEP_M / 2;
+  for (let i = 1; i < coords.length; i++) {
+    const [x0, y0] = coords[i - 1], [x1, y1] = coords[i], k = Math.cos(y0 * Math.PI / 180);
+    const d = Math.hypot((x1 - x0) * k, y1 - y0) * 111320;
+    while (carry <= d) { const f = carry / d; out.push([x0 + (x1 - x0) * f, y0 + (y1 - y0) * f]); carry += STEP_M; }
+    carry -= d;
+  }
+  if (!out.length && coords.length) { const m = coords[Math.floor(coords.length / 2)]; out.push(m); }
+  return out;
+}
+const tileName = (lon, lat) => { const la = Math.floor(lat / 3) * 3, lo = Math.floor(lon / 3) * 3; return `ESA_WorldCover_10m_2021_v200_${la >= 0 ? 'N' : 'S'}${String(Math.abs(la)).padStart(2, '0')}${lo >= 0 ? 'E' : 'W'}${String(Math.abs(lo)).padStart(3, '0')}_Map.tif`; };
+
+async function run() {
+  status('reading lines and faults…');
+  const pkg = (await getJSON(CKAN + 'package_show?id=' + LINES)).result, lineRes = pkg.resources.find(r => r.datastore_active);
+  const FIELDS = ['DISTRICT_SHORT_CODE', 'HV_INCIDENT_TIME', 'VOLTAGE_1', 'EQUIPMENT_CODE', 'CAUSE_CODE', 'CAUSE'];
+  const [lines, n, s, mn, ms] = await Promise.all([fetchAll(lineRes.id, ['circuit_nrn', 'nominal_voltage_pp', 'route', 'route_lat_long']),
+    fetchAll(HV.SHEPD, [...FIELDS, 'NRN_NORTH']), fetchAll(HV.SEPD, [...FIELDS, 'NRN_SOUTH']),
+    getJSON(CKAN + 'resource_show?id=' + HV.SHEPD), getJSON(CKAN + 'resource_show?id=' + HV.SEPD)]);
+
+  // 1. 11 kV feeders: length from the British National Grid route, sample points from the lat/long route
+  const feeders = new Map(), points = [];
+  for (const r of lines) {
+    if (parseFloat(r.nominal_voltage_pp) !== 11) continue;
+    const m = String(r.circuit_nrn || '').match(/^(\d{4})\.(\d{3})/); if (!m) continue;
+    const bng = (String(r.route).match(/-?\d+\.?\d*\s+-?\d+\.?\d*/g) || []).map(t => t.trim().split(/\s+/).map(Number));
+    const ll = (String(r.route_lat_long).match(/-?\d+\.?\d*\s+-?\d+\.?\d*/g) || []).map(t => t.trim().split(/\s+/).map(Number));
+    if (bng.length < 2 || ll.length < 2) continue;
+    let L = 0, sy = 0; bng.forEach(([x, y], i) => { sy += y; if (i) L += Math.hypot(x - bng[i - 1][0], y - bng[i - 1][1]); });
+    const key = (sy / bng.length > NORTH_FROM ? 'SHEPD' : 'SEPD') + ':' + +m[1] + ':' + +m[2];
+    const e = feeders.get(key) || feeders.set(key, { area: key.split(':')[0], km: 0, n: 0, tree: 0, tree2: 0, tree0: 0, f: 0, ft: 0, fall: 0, grow: 0, dist: {} }).get(key);
+    e.km += L / 1000;
+    for (const p of sample(ll)) points.push({ lon: p[0], lat: p[1], e });
+  }
+
+  // 2. tree cover around each point, reading each WorldCover block once
+  const byBlock = new Map(), tiffs = {};
+  for (const p of points) { const t = tileName(p.lon, p.lat); (byBlock.get(t) || byBlock.set(t, []).get(t)).push(p); }
+  let blocks = 0, done = 0, missing = 0;
+  for (const [t, pts] of byBlock) {
+    let img;
+    try { tiffs[t] = tiffs[t] || await GeoTIFF.fromUrl(PROXY + t); img = await tiffs[t].getImage(LEVEL); }
+    catch (err) { missing += pts.length; continue; }   // sea tiles have no file
+    // overviews carry no georeference of their own: take the bounds from the full-resolution image
+    const [W0, S0, E0, N0] = (await tiffs[t].getImage(0)).getBoundingBox(), Wd = img.getWidth(), Hd = img.getHeight(), TW = img.getTileWidth(), TH = img.getTileHeight();
+    const groups = new Map();
+    for (const p of pts) { p.px = Math.floor((p.lon - W0) / (E0 - W0) * Wd); p.py = Math.floor((N0 - p.lat) / (N0 - S0) * Hd); const k = Math.floor(p.px / TW) + ',' + Math.floor(p.py / TH); (groups.get(k) || groups.set(k, []).get(k)).push(p); }
+    const keys = [...groups.keys()];
+    for (let i = 0; i < keys.length; i += 6) {
+      await Promise.all(keys.slice(i, i + 6).map(async k => {
+        const [bx, by] = k.split(',').map(Number), x0 = Math.max(0, bx * TW - 2), y0 = Math.max(0, by * TH - 2), x1 = Math.min(Wd, (bx + 1) * TW + 2), y1 = Math.min(Hd, (by + 1) * TH + 2);
+        const ras = (await img.readRasters({ window: [x0, y0, x1, y1] }))[0], w = x1 - x0;
+        for (const p of groups.get(k)) {
+          const share = h => { let c = 0, tot = 0; for (let dy = -h; dy <= h; dy++) for (let dx = -h; dx <= h; dx++) { const xx = p.px + dx - x0, yy = p.py + dy - y0; if (xx < 0 || yy < 0 || xx >= w || yy >= y1 - y0) continue; tot++; if (ras[yy * w + xx] === TREE) c++; } return tot ? c / tot : null; };
+          const a = share(HALF), b = share(WIDE), c = share(0);   // 30 m square, 50 m square, and the single 10 m pixel on the line
+          if (a != null) { p.e.n++; p.e.tree += a; p.e.tree2 += b; p.e.tree0 += c; }
+        }
+        blocks++;
+      }));
+      done += keys.slice(i, i + 6).reduce((a, k) => a + groups.get(k).length, 0);
+      status(`tree cover: ${blocks} blocks read, ${done} of ${points.length} points`);
+    }
+  }
+
+  // 3. faults on 11 kV overhead line, by feeder, as in entry 05
+  const keyOf = (area, r) => {
+    if (area === 'SHEPD') { const [p, f] = String(r.NRN_NORTH ?? '').split('_'); return p && f ? `SHEPD:${+p}:${+f}` : null; }
+    return r.NRN_SOUTH == null ? null : `SEPD:${Math.floor(r.NRN_SOUTH / 1000)}:${r.NRN_SOUTH % 1000}`;
+  };
+  let matched = 0, overhead = 0;
+  const wind = await getJSON('cache/wind.json').catch(() => null), dayIx = wind ? new Map(wind.days.map((d, i) => [d, i])) : null;
+  const byYear = { SEPD: {}, SHEPD: {} }, byGust = { SEPD: { calm: 0, mid: 0, windy: 0, none: 0 }, SHEPD: { calm: 0, mid: 0, windy: 0, none: 0 } };
+  for (const [area, rows] of [['SHEPD', n], ['SEPD', s]]) for (const r of rows) {
+    const y = +String(r.HV_INCIDENT_TIME).slice(0, 4);
+    if (!(y >= YEARS[0] && y <= YEARS[1]) || PLANNED.has(String(r.CAUSE_CODE))) continue;
+    const e = feeders.get(keyOf(area, r)); if (e) e.dist[area + '/' + r.DISTRICT_SHORT_CODE] = (e.dist[area + '/' + r.DISTRICT_SHORT_CODE] || 0) + 1;
+    if (String(r.EQUIPMENT_CODE) !== '1' || +r.VOLTAGE_1 !== 11) continue;
+    overhead++; if (!e) continue; matched++;
+    e.f++; if (/tree/i.test(r.CAUSE || '')) { e.ft++; if (/growing/i.test(r.CAUSE)) e.grow++; else e.fall++;
+      byYear[area][y] = (byYear[area][y] || 0) + 1;
+      const g = wind?.gust[area + '/' + r.DISTRICT_SHORT_CODE]?.[dayIx.get(String(r.HV_INCIDENT_TIME).slice(0, 10))];
+      byGust[area][g == null ? 'none' : g < 30 ? 'calm' : g >= 50 ? 'windy' : 'mid']++; }
+  }
+
+  // 4. summaries
+  const yrs = YEARS[1] - YEARS[0] + 1, rate = (f, km) => f / km * 100 / yrs;
+  const F = [...feeders.values()].filter(e => e.n && e.km >= MIN_KM).map(e => ({ ...e, share: e.tree / e.n, share2: e.tree2 / e.n, share0: e.tree0 / e.n, d: Object.entries(e.dist).sort((a, b) => b[1] - a[1])[0]?.[0] }));
+  const binOf = v => BINS.findIndex((b, i) => v >= b && v < BINS[i + 1]);
+  const bins = ['SEPD', 'SHEPD'].map(area => ({ area, bins: BINS.slice(0, -1).map((lo, i) => {
+    const fs = F.filter(e => e.area === area && binOf(e.share) === i), km = fs.reduce((a, e) => a + e.km, 0), ft = fs.reduce((a, e) => a + e.ft, 0), f = fs.reduce((a, e) => a + e.f, 0);
+    return { lo, hi: BINS[i + 1] > 1 ? 1 : BINS[i + 1], feeders: fs.length, km: Math.round(km), treeFaults: ft, faults: f, treeRate: km ? r2(rate(ft, km)) : null, rate: km ? r2(rate(f, km)) : null };
+  }) }));
+  const tot = area => { const fs = F.filter(e => e.area === area), km = fs.reduce((a, e) => a + e.km, 0);
+    return { feeders: fs.length, km: Math.round(km), treeShare: r3(fs.reduce((a, e) => a + e.share * e.km, 0) / km), treeRate: r2(rate(fs.reduce((a, e) => a + e.ft, 0), km)), rate: r2(rate(fs.reduce((a, e) => a + e.f, 0), km)) }; };
+  const areas = { SEPD: tot('SEPD'), SHEPD: tot('SHEPD') };
+  // standardise: the south's tree-fault rate in each tree-cover band, weighted by how much northern line sits in each band, and the reverse
+  const B = Object.fromEntries(bins.map(b => [b.area, b.bins]));
+  const mix = (rates, weights) => { let s = 0, w = 0; rates.forEach((b, i) => { if (b.treeRate != null && weights[i].km) { s += b.treeRate * weights[i].km; w += weights[i].km; } }); return r2(s / w); };
+  const standard = { southAtNorthCover: mix(B.SEPD, B.SHEPD), northAtSouthCover: mix(B.SHEPD, B.SEPD) };
+  // the same standardisation for other choices: a wider square, and falling or growing trees only
+  const variant = (shareKey, faultKey) => {
+    const bb = Object.fromEntries(['SEPD', 'SHEPD'].map(area => [area, BINS.slice(0, -1).map((lo, i) => { const fs = F.filter(e => e.area === area && binOf(e[shareKey]) === i), km = fs.reduce((a, e) => a + e.km, 0), f = fs.reduce((a, e) => a + e[faultKey], 0); return { km, treeRate: km ? rate(f, km) : null }; })]));
+    const tr = area => { const fs = F.filter(e => e.area === area), km = fs.reduce((a, e) => a + e.km, 0); return rate(fs.reduce((a, e) => a + e[faultKey], 0), km); };
+    const S = tr('SEPD'), Nn = tr('SHEPD'), gap = S - Nn, a = (S - mix(bb.SEPD, bb.SHEPD)) / gap, b = (mix(bb.SHEPD, bb.SEPD) - Nn) / gap;
+    return { south: r2(S), north: r2(Nn), explained: [r2(Math.min(a, b)), r2(Math.max(a, b))] };
+  };
+  const sensitivity = { wider: variant('share2', 'ft'), pixel: variant('share0', 'ft'), falling: variant('share', 'fall'), growing: variant('share', 'grow'),
+    treeShare2: Object.fromEntries(['SEPD', 'SHEPD'].map(a => { const fs = F.filter(e => e.area === a), km = fs.reduce((s, e) => s + e.km, 0); return [a, r3(fs.reduce((s, e) => s + e.share2 * e.km, 0) / km)]; })),
+    treeShare0: Object.fromEntries(['SEPD', 'SHEPD'].map(a => { const fs = F.filter(e => e.area === a), km = fs.reduce((s, e) => s + e.km, 0); return [a, r3(fs.reduce((s, e) => s + e.share0 * e.km, 0) / km)]; })) };
+  // districts
+  const D = {}; for (const e of F) { if (!e.d) continue; const o = D[e.d] || (D[e.d] = { km: 0, tw: 0, ft: 0, f: 0 }); o.km += e.km; o.tw += e.share * e.km; o.ft += e.ft; o.f += e.f; }
+  const districts = Object.entries(D).filter(([, o]) => o.km >= 200).map(([key, o]) => ({ key, km: Math.round(o.km), treeShare: r3(o.tw / o.km), treeRate: r2(rate(o.ft, o.km)), rate: r2(rate(o.f, o.km)) })).sort((a, b) => b.treeShare - a.treeShare);
+  // rank correlation across feeders between tree cover and tree-fault rate, by area
+  const spearman = (a, b) => { const rk = v => { const s = v.map((x, i) => [x, i]).sort((p, q) => p[0] - q[0]), r = []; s.forEach(([, i], j) => r[i] = j); return r; }; const ra = rk(a), rb = rk(b), n = a.length; return 1 - 6 * ra.reduce((s, x, i) => s + (x - rb[i]) ** 2, 0) / (n * (n * n - 1)); };
+  const corr = Object.fromEntries(['SEPD', 'SHEPD'].map(a => { const fs = F.filter(e => e.area === a && e.km >= 10); return [a, r2(spearman(fs.map(e => e.share), fs.map(e => e.ft / e.km)))]; }));
+  return {
+    computed: new Date().toISOString(), years: YEARS, stepM: STEP_M, pixelM: LEVEL ? 20 : 10, squareM: (2 * HALF + 1) * (LEVEL ? 20 : 10), wideM: (2 * WIDE + 1) * (LEVEL ? 20 : 10), minKm: MIN_KM,
+    sources: { lines: { name: lineRes.name, modified: lineRes.last_modified || lineRes.metadata_modified }, faults: [mn.result, ms.result].map(r => ({ name: r.name, modified: r.last_modified || r.metadata_modified })), landcover: 'ESA WorldCover 10 m 2021 v200' },
+    sampling: { level: LEVEL, points: points.length, blocks, missing, feeders: F.length, matched, overhead },
+    areas, standard, sensitivity, corr, bins, districts, byYear, byGust
+  };
+}
+run().then(r => { window._result = r; const s = JSON.stringify(r); status(`done, ${(s.length / 1024).toFixed(0)} KB\n\n` + JSON.stringify(r, null, 1)); })
+  .catch(e => { window._error = String(e); status('failed: ' + e); });
+</script>

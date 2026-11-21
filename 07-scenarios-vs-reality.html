@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scenarios against reality · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .grid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; margin: 10px 0 6px; }
+  @media (max-width: 620px) { .grid4 { grid-template-columns: 1fr; } }
+  .panel h3 { font: 600 14px var(--sans); margin: 0 0 2px; }
+  .panel p { font-size: 12.5px; color: var(--ink-3); margin: 0 0 4px; }
+  .panel svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .panel text { font: 10.5px var(--mono); fill: var(--ink-3); }
+  .panel .grid { stroke: var(--rule); }
+  .panel .ln { fill: none; stroke-width: 2; }
+  .panel .base { fill: var(--ink); stroke: var(--panel); stroke-width: 1.5; }
+  .panel .rec { fill: var(--panel); stroke: var(--ink); stroke-width: 1.8; }
+  .verdict { font: 500 13px var(--sans); color: var(--ink); margin-top: 4px; }
+</style>
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a></nav></div></header>
+<main>
+  <div class="entry">Entry 07 <span class="status finding">Finding</span> <span class="small">· posted 21 November 2026</span></div>
+  <h1>Are heat pumps and home chargers arriving as fast as SSEN's 2020 scenarios assumed?</h1>
+  <p class="lede">In 2020 SSEN projected heat pumps and home EV chargers year by year under four scenarios. Here are those projections for the end of 2023, against what SSEN later estimated for the same date.</p>
+  <p>Network planning starts from scenarios like these: how many heat pumps and chargers will connect, and when. Entry 04's run-out years rest on a later edition of them. Five years on from the 2020 edition, there is enough history to check how its first few years turned out.</p>
+  <div id="out"><p class="loading">Loading the data…</p></div>
+  <footer>Part of <a href="./">Grid Labs</a>. A personal project, built in my own time from public open data. Not an SSEN product and not SSEN's view. Scenarios are not forecasts; this compares where they started with what happened.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+// The four FES 2020 scenarios. Three were designed to reach net zero by 2050; Steady Progression was not.
+const SCEN = [['Leading the Way', '--violet'], ['Consumer Transformation', '--s2'], ['System Transformation', '--s1'], ['Steady Progression', '--na']];
+const AREA = { SEPD: 'southern England', SHEPD: 'north of Scotland' };
+const N = (v, d = 0) => `<b class="n">${fmt(v, d)}</b>`;
+const k = v => v >= 1e4 ? fmt(v / 1e3) + 'k' : fmt(v);
+
+function panel(R, area, kind) {
+  const m = R.areas[area][kind], rec = R.records[area][kind], ys = R.years;
+  const X0 = ys[0], X1 = 2026.1, W = 330, H = 190, L = 40, Rr = 10, T = 8, B = 22;
+  const vmax = Math.max(...Object.values(m.scenarios).flat(), m.measured, rec || 0) * 1.06, step = niceStep(vmax);
+  const x = t => L + (t - X0) / (X1 - X0) * (W - L - Rr), y = v => H - B - v / vmax * (H - T - B);
+  const lines = SCEN.filter(([s]) => m.scenarios[s]).map(([s, c]) => `<path class="ln" style="stroke:var(${c})" d="${m.scenarios[s].map((v, i) => `${i ? 'L' : 'M'}${x(ys[i]).toFixed(1)},${y(v).toFixed(1)}`).join('')}"><title>${s}: ${fmt(m.scenarios[s][ys.indexOf(R.testYear)])} by ${R.testYear}</title></path>`).join('');
+  const recT = 2026.04;   // records published January 2026
+  return `<div class="panel"><h3>${m.label}, ${AREA[area]}</h3>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${m.label}, ${AREA[area]}: projected and estimated">
+      ${Array.from({ length: Math.floor(vmax / step) + 1 }, (_, i) => i * step).map(v => `<line class="grid" x1="${L}" x2="${W - Rr}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 5}" y="${y(v) + 3.5}" text-anchor="end">${k(v)}</text>`).join('')}
+      ${[2019, 2021, 2023, 2025].map(t => `<text x="${x(t)}" y="${H - 6}" text-anchor="middle">${t}</text>`).join('')}
+      <line class="grid" x1="${x(R.testYear)}" x2="${x(R.testYear)}" y1="${T}" y2="${H - B}" style="stroke-dasharray:3 3"/>
+      ${lines}
+      ${rec != null ? `<rect class="rec" x="${x(recT) - 4.5}" y="${y(rec) - 4.5}" width="9" height="9" data-tip="SSEN's connection records, January 2026: ${fmt(rec)}"><title>SSEN records, Jan 2026: ${fmt(rec)}</title></rect>` : ''}
+      <circle class="base" cx="${x(R.testYear)}" cy="${y(m.measured)}" r="5.5" data-tip="SSEN's DFES 2024 baseline estimate for the end of ${R.testYear}: ${fmt(m.measured)}"><title>2024 baseline estimate, end of ${R.testYear}: ${fmt(m.measured)}</title></circle>
+    </svg>
+    <p class="verdict">${verdict(m, R.testYear)}</p></div>`;
+}
+const niceStep = v => { const s = Math.pow(10, Math.floor(Math.log10(v / 4))), r = v / 4 / s; return (r < 1.5 ? 1 : r < 3.5 ? 2 : r < 7.5 ? 5 : 10) * s; };
+function verdict(m, yr) {
+  const i = 4, sc = SCEN.filter(([s]) => m.scenarios[s]).map(([s]) => [s, m.scenarios[s][i]]).sort((a, b) => a[1] - b[1]);
+  const top = sc.at(-1), bottom = sc[0], below = sc.filter(([, v]) => v > m.measured * 1.05).length;
+  if (m.measured >= top[1] * 0.95) return `${fmt(m.measured)} estimated: level with the boldest scenario (${fmt(top[1])}).`;
+  if (below === sc.length) return `${fmt(m.measured)} estimated: below every scenario.`;
+  return `${fmt(m.measured)} estimated: below ${below} of the 4 scenarios, ${fmt(m.measured / top[1] * 100)}% of the boldest.`;
+}
+
+function render(R) {
+  const S = R.areas.SEPD, Nn = R.areas.SHEPD, yr = R.testYear, i = R.years.indexOf(yr);
+  const s = (a, kind, scen) => R.areas[a][kind].scenarios[scen][i];
+  const nz = (a, kind) => ['Leading the Way', 'Consumer Transformation', 'System Transformation'].map(x => s(a, kind, x));
+  $('#out').innerHTML = `
+  <p class="snapshot">Snapshot: computed ${day(R.computed)} from SSEN's FES 2020 small-area projections, its DFES 2024 local authority data and its low carbon technology connection records published ${day(R.records.modified)}.</p>
+
+  <h2>Short answer</h2>
+  <div class="answer">
+    <p>Not for heat pumps in southern England. By the end of ${yr} SSEN's later estimate was about ${N(S.hp.measured)}, against ${N(Math.min(...nz('SEPD', 'hp')))} to ${N(Math.max(...nz('SEPD', 'hp')))} in the three 2020 scenarios built to reach net zero. Only Steady Progression, the scenario that misses net zero, projected fewer.</p>
+  </div>
+  <p>Hybrid heat pumps, which run alongside a gas boiler, barely appeared at all. The south's net zero scenarios expected ${N(Math.min(...nz('SEPD', 'hybrid')))} to ${N(Math.max(...nz('SEPD', 'hybrid')))} of them by the end of ${yr}; the 2024 baseline has ${N(S.hybrid.measured)}. In the north it was ${fmt(Math.min(...nz('SHEPD', 'hybrid')))} to ${fmt(Math.max(...nz('SHEPD', 'hybrid')))} expected and ${fmt(Nn.hybrid.measured)} counted.</p>
+  <p>Home chargers in the south kept pace with the boldest scenario, at least by the estimate SSEN used for its 2024 scenarios: ${N(S.chargers.measured)} against ${N(s('SEPD', 'chargers', 'Consumer Transformation'))}. Northern heat pumps look level with it too, ${N(Nn.hp.measured)} against ${N(s('SHEPD', 'hp', 'Leading the Way'))}, but much of that may be a recount.</p>
+  <p>The 2020 edition started from ${N(Nn.hp.scenarios['Consumer Transformation'][0])} northern heat pumps in 2019. Reaching ${fmt(Nn.hp.measured)} by the end of ${yr} means growing ${fmt(Nn.hp.measured / Nn.hp.scenarios['Consumer Transformation'][0], 1)} times in four years, against ${fmt(S.hp.measured / S.hp.scenarios['Consumer Transformation'][0], 1)} times in the south. If the later count found heat pumps the earlier one missed, the north was never as far ahead as this suggests.</p>
+  <p>SSEN's own connection records tell a slower story. Published in January 2026, two years later, they list ${N(R.records.SEPD.hp)} heat pumps in the south, ${N(R.records.SHEPD.hp)} in the north and ${N(R.records.SEPD.chargers)} EV chargers of all kinds in the south. They only include installations SSEN has been told about, and they may include some non-domestic heat pumps and public chargers, so they are a floor rather than a like-for-like count. Even with two more years of installations they sit well below the 2024 baseline, so the "keeping pace" cases depend on which count you trust. The southern heat pump shortfall shows up in both.</p>
+
+  <h2>Projected and estimated, 2019 to ${yr}</h2>
+  <div class="key">${SCEN.map(([s, c]) => `<span><i class="sq" style="background:var(${c});height:3px;vertical-align:middle"></i>${s}</span>`).join('')}
+    <span><i class="sq" style="background:var(--ink);border-radius:50%;width:10px;height:10px"></i>2024 baseline estimate, end of ${yr}</span>
+    <span><i class="sq" style="background:none;border:1.8px solid var(--ink);width:9px;height:9px"></i>SSEN connection records, Jan 2026</span></div>
+  <div class="grid4">${panel(R, 'SEPD', 'hp')}${panel(R, 'SHEPD', 'hp')}${panel(R, 'SEPD', 'chargers')}${panel(R, 'SHEPD', 'chargers')}</div>
+  <p class="small">Lines are the 2020 projections, added up over every small area in each licence area. The dot is the estimate SSEN's DFES 2024 used as its starting point, which it dates to the end of ${yr}. The square is SSEN's register of connected installations, as published in January 2026.</p>
+
+  <h2>Why the two counts differ</h2>
+  <p>The scenario baseline is an estimate. Regen, which produces the scenarios for SSEN, builds it from national and local data on installations and vehicles. SSEN's connection records come from installations reported to SSEN, which not every installer does. For chargers the gap is widest: ${N(S.chargers.measured)} home chargers in the southern baseline for the end of ${yr}, against ${N(R.records.SEPD.chargers)} EV chargers of all kinds in SSEN's records two years later.</p>
+  <p>Neither count is the true number. For planning the network the gap matters in its own right, because SSEN can only manage the load it knows about.</p>
+
+  <h2>Council by council: southern heat pumps</h2>
+  <p>The shortfall is not one or two places. Across the south as a whole the estimate is ${N(S.hp.councils.reduce((a, c) => a + c.measured, 0) / S.hp.councils.reduce((a, c) => a + (c['Consumer Transformation'] || 0), 0) * 100)}% of the Consumer Transformation projection. By council, for each with at least 200 heat pumps (smaller counts swing too much to compare):</p>
+  <figure>
+    <div class="hb" style="--one:${100 / 1.0 * (1 / 1.2)}%">
+      <div class="axis">${[0, 25, 50, 75, 100, 120].map(v => `<span style="left:${v / 120 * 100}%">${v}%</span>`).join('')}</div><div></div>
+      ${S.hp.councils.filter(c => c.measured >= 200 && c['Consumer Transformation'] > 0).sort((a, b) => b.measured / b['Consumer Transformation'] - a.measured / a['Consumer Transformation']).map(c => {
+        const r = c.measured / c['Consumer Transformation'];
+        return `<div class="lab" title="${esc(c.n)}">${esc(c.n)}</div><div class="trk" data-tip="${esc(c.n)}\n2024 baseline estimate, end of ${yr}: ${fmt(c.measured)}\nConsumer Transformation projection: ${fmt(c['Consumer Transformation'])}\nSteady Progression projection: ${fmt(c['Steady Progression'] || 0)}"><i style="width:${Math.min(1.2, r) / 1.2 * 100}%"></i></div><div class="val">${fmt(r * 100)}%</div>`; }).join('')}
+    </div>
+    <figcaption>The thin line marks 100%, where a council would be on the Consumer Transformation track. Council areas follow the 2024 data; Mendip and South Somerset are counted in Somerset, South Northamptonshire in West Northamptonshire.</figcaption>
+  </figure>
+
+  <h2>Method</h2>
+  <ol>
+    <li>Add up SSEN's FES 2020 projections for every output area in each licence area, for each of the four scenarios. Heat pumps are domestic heat pumps, fully electric or with gas back-up. Chargers are domestic off-street chargers. ${R.sources.filter(x => x.via === 'spreadsheet').length} of the 16 files are published only as spreadsheets and are read directly from them.</li>
+    <li>Take the baseline from SSEN's DFES 2024 local authority data: domestic heat pumps, hybrid and not, and domestic off-street EV chargers. SSEN's DFES 2024 report says this baseline is the end of the 2023 calendar year.</li>
+    <li>Take SSEN's low carbon technology connection records, published ${day(R.records.modified)}, added up by licence area. Primary substations numbered below 1000 are in the north of Scotland.</li>
+    <li>Compare at ${yr}.</li>
+  </ol>
+
+  <h2>What this cannot tell you</h2>
+  <ul>
+    <li>The two editions were built by the same team with similar definitions, but not identical ones. A change in method between 2020 and 2024 would look like a change in the real world here. The later data counts air-to-air heat pumps separately; they are about 2% of southern and 6% of northern heat pumps, too few to change the picture.</li>
+    <li>It checks three years of a thirty-year projection. Scenarios are meant to bracket the future, not predict it; being near the bottom of the range is not the same as being wrong.</li>
+    <li>The connection records are a floor, and their dates differ from the baseline's by two years.</li>
+    <li>The baseline is itself an estimate, built from national and local records of installations and vehicles. For home chargers there is no complete register, so that figure leans on assumptions about how many EV owners have one. An independent check, such as the MCS register of certified heat pump installations, is not used here.</li>
+    <li>It counts units, not load. A 7 kW charger and a 3.6 kW one, or a large and a small heat pump, count the same here but not on the network.</li>
+    <li>It does not cover electric vehicles themselves, which the 2020 data does not project, or the later scenario editions, whose projections are still in the future.</li>
+  </ul>
+
+  <h2>Data and reproduction</h2>
+  <p>Projections and baseline: SSEN's <b>Distribution Future Energy Scenarios Datasets</b> (${R.sources.length} files, latest updated ${day(R.sources.map(x => x.modified).filter(Boolean).sort().at(-1))}). Connection records: <b>${esc(R.records.name)}</b>, updated ${day(R.records.modified)}. All SSEN Distribution open data.</p>
+  <p>The result file is <a href="data/07-scenarios.json">data/07-scenarios.json</a>. The script that produced it, <span class="n">07-run.html</span>, is in the <a href="https://github.com/nirdeshacharya/grid-labs/tree/main/analysis">analysis folder</a> of the repository and runs in a browser.</p>`;
+}
+getJSON('data/07-scenarios.json?v=1').then(render).catch(e => { $('#out').innerHTML = `<p class="err">The result file could not be loaded: ${esc(e.message)}.</p>`; });
+</script>
+</body>
+</html>
