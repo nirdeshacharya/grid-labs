@@ -95,7 +95,7 @@
   <div class="entry">Visual · draws on entries 01, 02 and 04 <span class="small">· posted 20 November 2026</span></div>
   <h1>Your postcode's grid story</h1>
   <p class="lede">Type a postcode in SSEN's area, central southern England or the north of Scotland, to read about the electricity network that serves it: how much room it has, how often it fails, how storms hit it, and what is coming.</p>
-  <form class="ask" id="ask"><label class="small" for="pc">Postcode</label><input id="pc" name="pc" autocomplete="postal-code" placeholder="e.g. RG1 3BE" required><button>Tell the story</button><span class="seg view" id="view" role="group" aria-label="Show as"><button type="button" data-view="visual" aria-pressed="true">Visual</button><button type="button" data-view="text" aria-pressed="false">Text</button></span></form>
+  <form class="ask" id="ask"><label class="small" for="pc">Postcode</label><input id="pc" name="pc" autocomplete="postal-code" placeholder="e.g. PH1 3AQ" required><button>Tell the story</button><span class="seg view" id="view" role="group" aria-label="Show as"><button type="button" data-view="visual" aria-pressed="true">Visual</button><button type="button" data-view="text" aria-pressed="false">Text</button></span></form>
   <p class="examples" id="examples">Or try <button data-pc="RG1 3BE">Reading</button>, <button data-pc="IV2 3PA">Inverness</button>, <button data-pc="KW15 1JY">Kirkwall</button>, <button data-pc="PH8 0AA">Dunkeld</button> or <button data-pc="SP1 1BL">Salisbury</button>.</p>
   <div class="story" id="story" data-view="visual" aria-live="polite"><p class="loading">Loading SSEN's network data…</p></div>
 
@@ -328,7 +328,7 @@ async function start() {
   const per = A.areas.filter(a => a.f && a.lct?.customers >= 200).map(a => a.f.cml / a.lct.customers / a.f.years.length).sort((x, y) => x - y);
   medianCml = per[Math.floor(per.length / 2)];
   $('#sources').insertAdjacentHTML('beforeend', `<dt>Dates</dt><dd>Headroom file updated ${day(hf.modified)}. Areas built ${day(A.computed)}.</dd>`);
-  const q = new URLSearchParams(location.search).get('pc') || 'RG1 3BE';
+  const q = new URLSearchParams(location.search).get('pc') || 'PH1 3AQ';
   $('#pc').value = q; await tell(q);
 }
 $('#view').addEventListener('click', e => {
