@@ -21,6 +21,19 @@
   .hero figure { margin: 0; }
   .hero svg { width: 100%; height: auto; display: block; }
   .hero svg path { fill: var(--fill); stroke: var(--ink-3); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .hero svg path.feeder { fill: var(--s2); opacity: .28; stroke: none; }
+  .hero svg path.mine { fill: var(--s2); opacity: .9; stroke: var(--panel); stroke-width: .8; }
+  .fmap { display: block; width: 100%; max-width: 260px; height: auto; margin: 6px 0 2px; }
+  .fmap path { fill: var(--fill); stroke: var(--ink-3); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .fmap path.mine { fill: var(--s2); stroke: var(--panel); }
+  .fmap circle { fill: var(--signal); stroke: var(--ink); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .fbars { display: grid; grid-template-columns: 76px 1fr 34px; gap: 3px 8px; align-items: center; font-size: 12.5px; margin: 8px 0 4px; }
+  .fbars .l { color: var(--ink-2); white-space: nowrap; }
+  .fbars .l.me { color: var(--ink); font-weight: 600; }
+  .fbars .t { height: 10px; background: var(--fill); border-radius: 1px; }
+  .fbars .t i { display: block; height: 100%; background: var(--na); border-radius: 1px; }
+  .fbars .t i.me { background: var(--s2); }
+  .fbars .v { font: 12px var(--mono); text-align: right; }
   .hero svg circle { fill: var(--signal); stroke: var(--ink); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
   .kicker { font: 500 13px var(--mono); color: var(--ink-3); margin: 0 0 4px; }
   .big { font: 600 26px/1.25 var(--cond); margin: 0 0 14px; max-width: none; }
@@ -102,7 +115,7 @@
   <h2>Where this comes from</h2>
   <dl class="src" id="sources">
     <dt>Your postcode</dt><dd>Located with postcodes.io. Nothing is stored.</dd>
-    <dt>SSEN, live</dt><dd>Headroom, generation queue, outages, and the transmission voltage from each grid supply point's transformer ratio.</dd>
+    <dt>SSEN, live</dt><dd>Headroom, generation queue, outages, the transmission voltage from each grid supply point's transformer ratio, your local substation's area and your feeder's fault record.</dd>
     <dt>NESO, live</dt><dd>Generation mix, carbon intensity and the grid supply point lookup.</dd>
     <dt>Built ahead</dt><dd>Supply areas, faults, storms and low-carbon counts, from SSEN's datasets and <a href="02-wind-and-faults.html">entry 02</a> and <a href="04-headroom-runout.html">entry 04</a>.</dd>
   </dl>
@@ -137,6 +150,8 @@ function nesoGsp(name) {
 // ---- geometry ----
 const decode = enc => { const pts = []; let x = 0, y = 0; for (let i = 0; i < enc.length; i += 2) { x += enc[i]; y += enc[i + 1]; pts.push([x / Q, y / Q]); } return pts; };
 const inRing = (x, y, r) => { let c = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [xi, yi] = r[i], [xj, yj] = r[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; };
+const wkt = g => String(g || '').replace(/^\s*(MULTI)?POLYGON\s*/i, '').split(/\)\s*\)\s*,\s*\(\s*\(/).map(poly => poly.replace(/[()]/g, '|').split('|').map(r => r.trim()).filter(Boolean).filter(r => /\d/.test(r)).map(r => r.split(',').map(pt => pt.trim().split(/\s+/).map(Number))));
+const insidePoly = (lon, lat, rings) => rings.some(poly => inRing(lon, lat, poly[0]) && !poly.slice(1).some(h => inRing(lon, lat, h)));
 function locate(lon, lat) {
   for (const a of A.areas) {
     const [x0, y0, x1, y1] = a.bbox; if (lon < x0 || lon > x1 || lat < y0 || lat > y1) continue;
@@ -152,11 +167,11 @@ function locate(lon, lat) {
   }
   return best && bd * 111 < 1.5 ? { a: best, exact: false } : null;
 }
-function outline(a, lon, lat) {
+function outline(a, lon, lat, local) {
   const rings = a.rings.map(p => p[0]); let [x0, y0, x1, y1] = a.bbox; x0 = Math.min(x0, lon); x1 = Math.max(x1, lon); y0 = Math.min(y0, lat); y1 = Math.max(y1, lat);
   const k = Math.cos((y0 + y1) / 2 * Math.PI / 180), w = (x1 - x0) * k || .01, h = (y1 - y0) || .01, s = 180 / Math.max(w, h), W = w * s + 20, H = h * s + 20;
   const pt = (x, y) => `${((x - x0) * k * s + 10).toFixed(1)},${((y1 - y) * s + 10).toFixed(1)}`;
-  return `<svg viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" role="img" aria-label="Outline of the area this substation serves, with the postcode marked">${a.rings.map(p => `<path d="${p.map(r => 'M' + r.map(([x, y]) => pt(x, y)).join('L') + 'Z').join('')}" fill-rule="evenodd"/>`).join('')}<circle cx="${pt(lon, lat).split(',')[0]}" cy="${pt(lon, lat).split(',')[1]}" r="5"/></svg>`;
+  return `<svg viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" role="img" aria-label="Outline of the area this substation serves, with the postcode marked">${a.rings.map(p => `<path d="${p.map(r => 'M' + r.map(([x, y]) => pt(x, y)).join('L') + 'Z').join('')}" fill-rule="evenodd"/>`).join('')}${local ? local.feederAreas.map(sa => `<path class="${sa === local.mine ? 'mine' : 'feeder'}" d="${sa.rings.map(p => p.map(r => 'M' + r.map(([x, y]) => pt(x, y)).join('L') + 'Z').join('')).join('')}" fill-rule="evenodd"/>`).sort(b => b.includes('mine') ? 1 : -1).join('') : ''}<circle cx="${pt(lon, lat).split(',')[0]}" cy="${pt(lon, lat).split(',')[1]}" r="5"/></svg>`;
 }
 
 // ---- matching an area to SSEN's live headroom rows ----
@@ -176,6 +191,8 @@ const TERMS = {
   gsp: ['Grid supply point', 'Where the transmission network hands power to SSEN\'s local network, through large transformers that step the voltage down.'],
   bsp: ['Bulk supply point', 'A substation that steps 132 kV down to 33 kV for a wider area. Common in southern England; in the north of Scotland most primaries are fed straight from a grid supply point.'],
   primary: ['Primary substation', 'Steps 33 kV down to 11 kV for the streets around it, usually serving a few thousand to tens of thousands of customers. Small local substations then bring it down to the 230 V in your sockets.'],
+  feeder: ['11 kV feeder', 'One of the circuits leaving a primary substation. It runs past streets and villages, stopping at local substations along the way, and can be many kilometres long. A fault anywhere on it can cut off everyone it serves until the damaged section is switched out.'],
+  secondary: ['Local substation', 'The last step down, from 11 kV to the 230 V in your home. In towns it is usually a green metal cabinet or small building; in the countryside often a transformer on a pole. Each one serves anything from a few homes to a few hundred.'],
   kv: ['kV (kilovolts)', 'A measure of voltage. 1 kV is 1,000 volts; a home socket is 230 V. Higher voltages move power further with smaller losses.'],
   mw: ['MW (megawatts)', 'Real power, the part that does useful work such as heating or turning a motor. 1 MW is 1,000 kW; a kettle uses about 3 kW.'],
   mva: ['MVA (megavolt-amperes)', 'The total load a transformer or cable carries, including power that surges back and forth without doing useful work. Equipment is rated in MVA because heat depends on the total current. MW = MVA × power factor, which on most networks is around 0.95, so 10 MVA carries roughly 9.5 MW. For a rough read, treat them as about the same.'],
@@ -214,6 +231,58 @@ const card = (title, body, wide) => ({ wide, html: `<section class="card${wide ?
 // narrow cards sit in pairs; a narrow card left without a partner is widened so the grid has no holes
 function layoutCards(list) { const out = []; let pending = null; for (const c of list) { if (c.wide) { out.push(c); continue; } if (pending) { out.push(pending, c); pending = null; } else pending = c; } if (pending) out.push({ html: pending.html.replace('class="card"', 'class="card wide"') }); return out.map(c => c.html).join(''); }
 
+// ---- the street level: local substation and 11 kV feeder, fetched live for the primary that serves the postcode ----
+const SEC_DATASET = 'secondary-supply-areas', FAULTS = { SHEPD: '245d5825-7d83-4d17-a2c5-04b473b9b408', SEPD: 'f0d9d3fe-6739-4700-a699-f227b4e1de41' };
+const PLANNED = new Set(['75', '86']), FAULT_YEARS = [2016, 2025];
+let secRes = null;
+async function localFor(a, lon, lat) {
+  secRes = secRes || getJSON(CKAN + 'package_show?id=' + SEC_DATASET).then(j => Object.fromEntries(j.result.resources.filter(r => r.datastore_active).map(r => [/SHEPD/.test(r.name) ? 'SHEPD' : 'SEPD', r.id])));
+  const rid = (await secRes)[a.a], prim = +a.pk.split(':')[1];
+  const recs = (await getJSON(`${CKAN}datastore_search?limit=5000&fields=nrn_10_digit,hv_feeder_nrn,tx_nrn,geometry&filters=${encodeURIComponent(JSON.stringify({ primary_nrn_split: String(prim).padStart(4, '0') }))}&resource_id=${rid}`)).result.records;
+  if (!recs.length) return null;
+  const areas = recs.map(r => ({ nrn: String(r.nrn_10_digit).padStart(10, '0'), feeder: r.hv_feeder_nrn, tx: r.tx_nrn, rings: wkt(r.geometry) }));
+  let mine = areas.find(sa => insidePoly(lon, lat, sa.rings));
+  if (!mine) { // the postcode's centre point can fall in a gap between areas: take the nearest corner within about 500 m
+    let bd = Infinity; const k = Math.cos(lat * Math.PI / 180);
+    for (const sa of areas) for (const poly of sa.rings) for (const [x, y] of poly[0]) { const d = Math.hypot((x - lon) * k, y - lat); if (d < bd) { bd = d; mine = sa; } }
+    if (bd * 111 > 0.5) mine = null;
+  }
+  if (!mine) return null;
+  // every feeder on this primary, with its fault record for the ten years
+  const feeders = [...new Set(areas.map(sa => sa.feeder))].sort();
+  const faultsFor = f => getJSON(`${CKAN}datastore_search?limit=32000&fields=HV_INCIDENT_TIME,CAUSE_CODE,CAUSE,EQUIPMENT,HV_CUST_MINS_LOST&filters=${encodeURIComponent(JSON.stringify(a.a === 'SEPD' ? { NRN_SOUTH: prim * 1000 + +f } : { NRN_NORTH: `${String(prim).padStart(3, '0')}_${f}` }))}&resource_id=${FAULTS[a.a]}`)
+    .then(j => j.result.records.filter(r => { const y = +String(r.HV_INCIDENT_TIME).slice(0, 4); return y >= FAULT_YEARS[0] && y <= FAULT_YEARS[1] && !PLANNED.has(String(r.CAUSE_CODE)); })).catch(() => null);
+  const lists = await Promise.all(feeders.map(faultsFor));
+  const per = feeders.map((f, i) => ({ f, secs: areas.filter(sa => sa.feeder === f).length, faults: lists[i] }));
+  return { mine, feederAreas: areas.filter(sa => sa.feeder === mine.feeder), per, me: per.find(p => p.f === mine.feeder), count: areas.length };
+}
+// zoomed map of the feeder's local substation areas, with the postcode's own area filled in
+function feederMap(L, lon, lat) {
+  const pts = L.feederAreas.flatMap(sa => sa.rings.flatMap(p => p[0])).concat([[lon, lat]]);
+  const x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0])), y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]));
+  const k = Math.cos((y0 + y1) / 2 * Math.PI / 180), w = (x1 - x0) * k || 1e-3, h = (y1 - y0) || 1e-3, sc = 240 / Math.max(w, h), W = w * sc + 12, H = h * sc + 12;
+  const pt = (x, y) => `${((x - x0) * k * sc + 6).toFixed(1)},${((y1 - y) * sc + 6).toFixed(1)}`;
+  const path = sa => `<path class="${sa === L.mine ? 'mine' : ''}" d="${sa.rings.map(p => p.map(r => 'M' + r.map(([x, y]) => pt(x, y)).join('L') + 'Z').join('')).join('')}" fill-rule="evenodd"/>`;
+  const [cx, cy] = pt(lon, lat).split(',');
+  return `<svg class="fmap" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" role="img" aria-label="The areas served by the local substations on this feeder, with yours filled in">${L.feederAreas.filter(sa => sa !== L.mine).map(path).join('')}${path(L.mine)}<circle cx="${cx}" cy="${cy}" r="4"/></svg>`;
+}
+function feederCard(L, sub, lon, lat) {
+  const me = L.me, ok = L.per.filter(p => p.faults), max = Math.max(1, ...ok.map(p => p.faults.length));
+  if (!me.faults) return null;
+  const n = me.faults.length, more = ok.filter(p => p.faults.length > n).length, withAny = ok.filter(p => p.faults.length).length;
+  const causes = {}; for (const r of me.faults) { const c = r.CAUSE || 'Not recorded'; causes[c] = (causes[c] || 0) + 1; }
+  const top = Object.entries(causes).sort((x, y) => y[1] - x[1])[0], oh = me.faults.filter(r => /overhead/i.test(r.EQUIPMENT || '')).length;
+  const rows = [...ok].sort((x, y) => y.faults.length - x.faults.length);
+  const standing = !n ? `No faults on your feeder in those years; ${fmt(withAny)} of ${esc(sub)}'s ${fmt(ok.length)} feeders had some.`
+    : more === 0 ? (ok.length > 1 ? `The most of any of ${esc(sub)}'s ${fmt(ok.length)} feeders.` : '')
+    : `${fmt(more)} of ${esc(sub)}'s ${fmt(ok.length)} feeders had more.`;
+  const detail = n ? ` ${n > 1 ? `Biggest cause: ${esc(lowerFirst(top[0]))} (${fmt(top[1])})` : `Cause: ${esc(lowerFirst(top[0]))}`}. ${oh === 0 ? (n === 1 ? 'It was not' : 'None were') : oh === n ? (n === 1 ? 'It was' : 'All were') : `${fmt(oh)} of the ${fmt(n)} were`} on overhead line.` : '';
+  return { n, more, of: ok.length, top, oh, html: `${feederMap(L, lon, lat)}<p class="note" style="margin-top:0">The ${fmt(L.feederAreas.length)} local substation ${L.feederAreas.length === 1 ? 'area' : 'areas'} on your feeder; yours is filled in.</p>
+    <p class="num">${fmt(n)}<small> ${n === 1 ? 'fault' : 'faults'} on your ${term('feeder', 'feeder')}, ${FAULT_YEARS[0]} to ${FAULT_YEARS[1]}</small></p>
+    <div class="fbars" role="img" aria-label="Faults on each of ${esc(sub)}'s feeders">${rows.map(p => `<span class="l${p === me ? ' me' : ''}">Feeder ${+p.f}${p === me ? ' (you)' : ''}</span><span class="t" data-tip="Feeder ${+p.f}: ${fmt(p.faults.length)} faults, ${fmt(p.secs)} local substations"><i class="${p === me ? 'me' : ''}" style="width:${p.faults.length / max * 100}%"></i></span><span class="v">${fmt(p.faults.length)}</span>`).join('')}</div>
+    <p class="note">${standing}${detail} A fault anywhere on the feeder counts, not only near you.</p>` };
+}
+
 async function tell(pcRaw) {
   const story = $('#story'), pc = pcRaw.trim().toUpperCase().replace(/\s+/g, ' ');
   story.innerHTML = `<p class="loading">Looking up ${esc(pc)}…</p>`;
@@ -232,6 +301,7 @@ async function tell(pcRaw) {
   const gspKv = gRow?.voltage__kv_ ? String(gRow.voltage__kv_).replace(/\s+/g, '') : null, txKv = gspKv ? Math.max(...gspKv.split('/').map(Number).filter(Number.isFinite)) : null;
   const txOwner = a.a === 'SEPD' ? 'National Grid Electricity Transmission' : 'SSEN Transmission', txShort = a.a === 'SEPD' ? 'National Grid' : 'SSEN Transmission';
   const node = gspName && nesoGsp(gspName);
+  const L = await localFor(a, lon, lat).catch(() => null);
 
   // header: where
   const head1 = `<div class="hero"><div>
@@ -242,10 +312,14 @@ async function tell(pcRaw) {
         ['', esc(gspName || '?'), `${term('gsp', 'grid supply point')}${gspKv ? `, ${esc(gspKv)} kV` : ''}`],
         ...(bsp ? [['', esc(bsp), term('bsp', 'bulk supply point')]] : []),
         ['me', esc(sub), `${term('primary', 'primary')}${a.lct ? `, ${fmt(a.lct.customers)} customers` : ''}`],
+        ...(L ? [['', `Feeder ${+L.mine.feeder}`, `${term('feeder', '11 kV feeder')}, ${fmt(L.feederAreas.length)} local substations`],
+          ['', 'Local substation', `${term('secondary', 'secondary')}, 11 kV to 230 V`]] : []),
         ['you', esc(pc), 'you'],
       ].map(([cls, name, role]) => `<span class="step"><span class="c ${cls}" title="${cls === 'tx' ? esc(txOwner) : ''}">${name}<small>${role}</small></span></span>`).join('')}</div>
-    </div><figure>${outline(a, lon, lat)}<figcaption class="small">The area ${esc(sub)} serves. The dot is ${esc(pc)}.</figcaption></figure></div>`;
+    </div><figure>${outline(a, lon, lat, L)}<figcaption class="small">The area ${esc(sub)} serves${L ? '. Light orange: the streets on your feeder. Dark orange: your local substation' : ''}. The dot is ${esc(pc)}.</figcaption></figure></div>`;
   text.push(`${esc(pc)} is in ${esc(town || 'SSEN\'s area')}, in SSEN's ${a.a === 'SEPD' ? 'southern' : 'northern'} licence area, supplied from ${esc(sub)} primary substation${a.lct ? ` (about ${fmt(a.lct.customers)} customers)` : ''}${gspName ? `, fed through ${bsp ? esc(bsp) + ' bulk supply point and ' : ''}${esc(gspName)} grid supply point` : ''}.`);
+
+  if (L) text.push(`Within that, it is on feeder ${+L.mine.feeder}, one of ${fmt(L.per.length)} feeders leaving ${esc(sub)} at 11 kV, which runs past ${fmt(L.feederAreas.length)} of the primary's ${fmt(L.count)} local substations.`);
 
   // where the power comes from right now (NESO)
   const regMix = carbon?.find(x => x.regionid === (a.a === 'SEPD' ? 12 : 1));
@@ -278,8 +352,10 @@ async function tell(pcRaw) {
     const all = A.areas.filter(x => x.f && x.lct?.customers >= 200).map(x => x.f.cml / x.lct.customers / x.f.years.length);
     const word = per > medianCml * 1.5 ? 'well above' : per > medianCml * 1.1 ? 'above' : per < medianCml / 1.5 ? 'well below' : per < medianCml / 1.1 ? 'below' : 'about';
     cards.push(card('Faults, 2016 to 2025', `<p class="num">${fmt(n)}<small> high-voltage faults</small></p>${columns(a.f.years, A.years[0])}<p class="note">Biggest cause: ${esc(lowerFirst(String(a.f.top)))} (${a.f.topShare}% of minutes lost).</p>`));
+    { const fc = L && feederCard(L, sub, lon, lat); if (fc) { cards.push(card('Your 11 kV feeder', fc.html)); L.text = (`Feeder ${+L.mine.feeder} itself had ${fc.n ? fmt(fc.n) : 'no'} ${fc.n === 1 ? 'fault' : 'faults'} in the same years; ${fmt(fc.more)} of the primary's ${fmt(fc.of)} feeders had more${fc.n ? `. ${fc.n === 1 ? 'Its cause' : 'Its biggest cause'} was ${esc(lowerFirst(fc.top[0]))}` : ''}.`); } }
     cards.push(card('Minutes off supply a year', `<p class="num">${fmt(per)}<small> per customer, from ${term('cml', 'customer-minutes lost')}</small></p>${strip(all.map(v => Math.min(v, 400)), Math.min(per, 400), `${sub}: ${fmt(per)} minutes; each tick is another SSEN primary`, v => fmt(v))}<p class="note">${word === 'about' ? 'About the same as' : word[0].toUpperCase() + word.slice(1)} the typical SSEN primary (${fmt(medianCml)} minutes). Each tick is another primary.</p>`));
     text.push(`It had ${fmt(n)} high-voltage faults from ${A.years[0]} to ${A.years[1]}, costing about ${fmt(per)} minutes of supply per customer per year, ${word} the typical SSEN primary (${fmt(medianCml)}). Biggest cause: ${esc(lowerFirst(String(a.f.top)))}.`);
+    if (L?.text) text.push(L.text);
   }
 
   // storms, from entry 02
