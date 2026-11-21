@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A day on Orkney's grid · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .days { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0 10px; }
+  .days button { font: inherit; font-size: 13.5px; color: var(--ink-2); background: var(--panel); border: 1px solid var(--rule); border-radius: 2px; padding: 6px 11px; cursor: pointer; }
+  .days button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  .days button small { display: block; font: 11px var(--mono); opacity: .7; }
+  .pick { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; color: var(--ink-3); margin-bottom: 14px; }
+  .pick input { font: 14px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 2px; padding: 5px 8px; }
+  .note { font-size: 16px; min-height: 2.8em; margin: 0 0 14px; max-width: 66ch; }
+  .now { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-block: 1px solid var(--rule); margin-bottom: 10px; }
+  .now > div { padding: 8px 10px 8px 0; }
+  .now > div + div { border-left: 1px solid var(--rule); padding-left: 10px; }
+  .now b { display: block; font: 500 22px/1.2 var(--mono); letter-spacing: -.02em; }
+  .now span { font-size: 12px; color: var(--ink-3); }
+  .now .t b { font-size: 18px; }
+  @media (max-width: 560px) { .now { grid-template-columns: repeat(3, minmax(0, 1fr)); } .now > div:nth-child(4) { border-left: 0; padding-left: 0; } .now b { font-size: 19px; } }
+  .chart svg { display: block; width: 100%; height: auto; touch-action: pan-y; cursor: crosshair; }
+  .chart text { font: 11px var(--mono); fill: var(--ink-3); }
+  .chart .grid { stroke: var(--rule); stroke-width: 1; }
+  .chart .other { fill: var(--na); }
+  .chart .managed { fill: var(--s2); }
+  .chart .demand { fill: none; stroke: var(--ink); stroke-width: 2.5; }
+  .chart .wind { fill: none; stroke: var(--s1); stroke-width: 2; }
+  .chart .windfill { fill: var(--s1); opacity: .15; }
+  .chart .cursor { stroke: var(--signal); stroke-width: 2; }
+  .key { margin-top: 8px; }
+  .controls2 { display: flex; gap: 10px; align-items: center; margin: 10px 0 18px; }
+  .controls2 button { font: 600 14px var(--sans); color: var(--panel); background: var(--ink); border: 0; border-radius: 2px; padding: 8px 16px; cursor: pointer; min-width: 84px; }
+  .controls2 input[type=range] { flex: 1; accent-color: var(--ink); }
+  .flow { display: grid; grid-template-columns: 1fr 120px 1fr; align-items: center; gap: 8px; margin: 6px 0 4px; }
+  .flow .box { border: 1px solid var(--rule); border-radius: 3px; padding: 10px 12px; background: var(--panel); }
+  .flow .box h3 { font: 600 14px var(--sans); margin: 0 0 6px; }
+  .flow .box p { margin: 0; font-size: 13px; color: var(--ink-2); }
+  .flow svg { width: 100%; height: 60px; display: block; overflow: visible; }
+  .flow .arrow { fill: var(--s1); transition: all .25s; }
+  .flow .arrow.imp { fill: var(--crit); }
+  .flow .lbl { font: 500 13px var(--mono); fill: var(--ink); text-anchor: middle; }
+  .sum { font-size: 14px; color: var(--ink-2); max-width: 66ch; }
+</style>
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a></nav></div></header>
+<main>
+  <div class="entry">Visual · from entry 06 <span class="small">· posted 21 November 2026</span></div>
+  <h1>A day on Orkney's grid</h1>
+  <p class="lede">Pick a day and play it back half-hour by half-hour: the wind, what Orkney used, what its generators made, and what went to or came from the mainland.</p>
+
+  <div class="days" id="days" role="group" aria-label="Featured days"></div>
+  <div class="pick"><label for="date">Or any day from 2 February 2016 to 31 December 2025</label><input type="date" id="date" min="2016-02-02" max="2025-12-31"></div>
+  <p class="note" id="note" aria-live="polite"><span class="loading">Loading SSEN's Orkney data…</span></p>
+
+  <div class="now" id="now"></div>
+  <div class="chart" id="chart"></div>
+  <div class="key">
+    <span><i class="sq" style="background:var(--na)"></i>Other generators</span>
+    <span><i class="sq" style="background:var(--s2)"></i>Managed generators (ANM)</span>
+    <span><i class="sq" style="background:var(--ink);height:3px;vertical-align:middle"></i>Orkney demand</span>
+    <span><i class="sq" style="background:var(--s1);height:3px;vertical-align:middle"></i>Wind at 100 m</span>
+  </div>
+  <div class="controls2"><button id="play">Play</button><input type="range" id="slider" min="0" max="47" value="24" aria-label="Time of day"></div>
+
+  <div class="flow" aria-live="polite">
+    <div class="box"><h3>Orkney</h3><p id="ork"></p></div>
+    <svg viewBox="0 0 120 60" aria-hidden="true"><polygon class="arrow" id="arrow" points="0,30 120,30 120,30 0,30"/><text class="lbl" id="flowlbl" x="60" y="56"></text></svg>
+    <div class="box"><h3>Scottish mainland</h3><p>Through the links from Orkney to Caithness</p></div>
+  </div>
+  <p class="sum" id="sum"></p>
+
+  <h2>About the data</h2>
+  <p class="small">Half-hourly averages from SSEN's Orkney active network management data, loaded from SSEN's open data portal when you pick a day. SSEN labels the columns kW, but the values are MW. "Managed generators" are those the network can turn down when it is full; "other generators" are the rest, excluding small generators under 50 kW. Flow to or from the mainland is generation minus demand. Wind is the hourly wind speed at 100 m over central Orkney Mainland from the <a href="https://open-meteo.com">Open-Meteo</a> historical weather API (ERA5), drawn between the hours. Times are UTC. The notes on the featured days are worked out from the data on screen; <a href="06-orkney-curtailment.html">entry 06</a> has the analysis behind them.</p>
+  <footer>Part of <a href="./">Grid Labs</a>. A personal project, built in my own time from public open data. Not an SSEN product and not SSEN's view.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+const DATASET = 'orkney_active_network_management';
+// Featured days, chosen from ten years of data in entry 06. Each note is filled in from the day's own numbers.
+const DAYS = [
+  { d: '2017-11-18', label: 'Full blast', note: s => `Strong wind from start to finish. Orkney exported for ${s.exportHours === 24 ? 'all 24 hours' : `${fmt(s.exportHours, 1)} hours`}, up to ${fmt(s.maxExport, 0)} MW.` },
+  { d: '2024-01-22', label: 'Gale, held back', note: s => `Wind averaging ${fmt(s.wind, 0)} m/s, yet the managed generators made only ${fmt(s.managedPerOther * 100, 0)}% as much as the other generators, and Orkney ${s.maxImport > 1 ? `imported up to ${fmt(s.maxImport, 0)} MW at times` : 'barely exported'}. Export stayed low all that month, which looks like a link to the mainland out of service.` },
+  { d: '2025-10-07', label: 'Switched off', note: s => `The other generators made ${fmt(s.otherMWh, 0)} MWh in a ${fmt(s.wind, 0)} m/s breeze. The managed generators made ${fmt(Math.max(0, s.managedMWh), 0)} MWh. The data does not say why.` },
+  { d: '2019-12-17', label: 'Still and cold', note: s => `Almost no wind and high demand. Orkney's generators covered ${fmt(s.selfShare * 100, 0)}% of what it used; the rest, up to ${fmt(s.maxImport, 0)} MW, came from the mainland.` },
+  { d: '2020-01-04', label: 'Both ways', note: s => `The wind rose and fell, and the flow to the mainland swung between ${fmt(s.maxExport, 0)} MW out and ${fmt(s.maxImport, 0)} MW in on the same day.` },
+  { d: '2016-06-14', label: 'Light summer day', note: s => `Demand fell as low as ${fmt(s.minDemand, 1)} MW. In a ${fmt(s.wind, 0)} m/s breeze the managed generators made only ${fmt(s.managedPerOther * 100, 0)}% as much as the other generators.` },
+];
+const W = 720, PAD = { l: 34, r: 12 }, WIND_MAX = 30;
+const csvCache = {}, windCache = {};
+let resources = null, cur = null, idx = 24, timer = null;
+
+const parseT = s => { const m = String(s).trim().match(/^(\d\d)\/(\d\d)\/(\d{4}) (\d\d):(\d\d)/); return m ? Date.UTC(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]) : null; };
+function parse(text) {   // each year's file has its own layout
+  const L = text.split(/\r?\n/).filter(Boolean), out = [];
+  if (/^Timestamp,/.test(L[0])) { for (const l of L.slice(1)) { const [ts, a, g, d] = l.split(','), t = parseT(ts); if (t != null) out.push({ t, anm: +a, gen: +g, dem: +d }); } return out; }
+  const head = L[1].split(','), gi = head.findIndex(h => /Total Generation/i.test(h)), di = head.findIndex(h => /Demand/i.test(h));
+  for (const l of L.slice(3)) { const c = l.split(','), t = parseT(c[0]); if (t != null) out.push({ t, anm: +c[1], gen: +c[gi + 1], dem: +c[di + 1] }); }
+  return out;
+}
+async function yearRows(y) {
+  if (!csvCache[y]) {
+    resources = resources || (await getJSON(CKAN + 'package_show?id=' + DATASET)).result.resources.filter(r => /half hour/i.test(r.name));
+    const r = resources.find(r => r.name.trim().startsWith(String(y)) || new RegExp('\\b' + y + '\\b').test(r.name));
+    if (!r) throw new Error('SSEN has no Orkney file for ' + y);
+    csvCache[y] = fetch(r.url).then(x => { if (!x.ok) throw new Error('SSEN returned ' + x.status); return x.text(); }).then(parse);
+  }
+  return csvCache[y];
+}
+async function windFor(d) {
+  if (!windCache[d]) windCache[d] = getJSON(`https://archive-api.open-meteo.com/v1/archive?latitude=59&longitude=-3.05&start_date=${d}&end_date=${d}&hourly=wind_speed_100m&wind_speed_unit=ms&timezone=GMT`)
+    .then(j => j.hourly.wind_speed_100m).catch(() => null);
+  return windCache[d];
+}
+
+async function load(d) {
+  stop();
+  $('#note').innerHTML = '<span class="loading">Loading…</span>';
+  for (const b of document.querySelectorAll('#days button')) b.setAttribute('aria-pressed', b.dataset.d === d);
+  $('#date').value = d;
+  try { history.replaceState(null, '', '?day=' + d); } catch { /* optional */ }
+  try {
+    const t0 = Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10));
+    const [rows, wind] = await Promise.all([yearRows(+d.slice(0, 4)), windFor(d)]);
+    const hh = rows.filter(r => r.t >= t0 && r.t < t0 + 864e5).sort((a, b) => a.t - b.t);
+    if (hh.length < 40) throw new Error(`SSEN's file has only ${hh.length} half-hours for this day`);
+    const pts = hh.map(r => {
+      const i = (r.t - t0) / 18e5, h = i / 2, a = wind?.[Math.floor(h)], b = wind?.[Math.min(23, Math.floor(h) + 1)];
+      return { i, managed: Math.max(0, r.anm), other: Math.max(0, r.gen - r.anm), dem: r.dem, flow: r.gen - r.dem, wind: a == null ? null : a + ((b ?? a) - a) * (h - Math.floor(h)) };
+    });
+    const sum = k => pts.reduce((s, p) => s + p[k], 0) * 0.5;
+    const s = { managedMWh: sum('managed'), otherMWh: sum('other'), demandMWh: sum('dem'),
+      exportMWh: pts.reduce((a, p) => a + Math.max(0, p.flow), 0) * 0.5, importMWh: pts.reduce((a, p) => a + Math.max(0, -p.flow), 0) * 0.5,
+      maxExport: Math.max(0, ...pts.map(p => p.flow)), maxImport: Math.max(0, ...pts.map(p => -p.flow)), minDemand: Math.min(...pts.map(p => p.dem)),
+      exportHours: pts.filter(p => p.flow > 0).length / 2, wind: wind ? wind.reduce((a, b) => a + b, 0) / wind.length : null };
+    s.managedPerOther = s.otherMWh > 0 ? s.managedMWh / s.otherMWh : 0;
+    s.selfShare = Math.min(1, (s.managedMWh + s.otherMWh) / s.demandMWh);
+    cur = { d, pts, s };
+    const feat = DAYS.find(x => x.d === d);
+    const longD = new Date(t0).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+    $('#note').innerHTML = `<b>${longD}.</b> ${feat ? feat.note(s) : (s.exportMWh >= s.importMWh ? `Orkney sent ${fmt(s.exportMWh, 0)} MWh to the mainland and took ${fmt(s.importMWh, 0)} MWh back.` : `Orkney took ${fmt(s.importMWh, 0)} MWh from the mainland and sent ${fmt(s.exportMWh, 0)} MWh.`)}`;
+    $('#sum').innerHTML = `Over the day: demand ${fmt(s.demandMWh, 0)} MWh · managed generators ${fmt(s.managedMWh, 0)} MWh · other generators ${fmt(s.otherMWh, 0)} MWh · to the mainland ${fmt(s.exportMWh, 0)} MWh · from the mainland ${fmt(s.importMWh, 0)} MWh${s.wind == null ? ' · wind not available' : ''}.`;
+    draw(); show(idx);
+  } catch (e) {
+    $('#note').innerHTML = `<span class="err">Could not load that day: ${esc(e.message)}.</span>`;
+  }
+}
+
+function draw() {
+  // one SVG, two panels sharing the time axis: power on top, wind underneath
+  const { pts } = cur, ymax = Math.max(30, Math.ceil(Math.max(...pts.map(p => Math.max(p.managed + p.other, p.dem))) / 10) * 10);
+  const top = 10, mainB = 238, windT = 262, windB = 330, Hs = 352;
+  const x = i => PAD.l + i / 47 * (W - PAD.l - PAD.r), y = v => mainB - v / ymax * (mainB - top), yw = v => windB - Math.min(v, WIND_MAX) / WIND_MAX * (windB - windT);
+  const area = (lo, hi) => `M${pts.map(p => `${x(p.i)},${y(hi(p))}`).join('L')}L${[...pts].reverse().map(p => `${x(p.i)},${y(lo(p))}`).join('L')}Z`;
+  const line = (f, yy) => pts.filter(p => f(p) != null).map((p, k) => `${k ? 'L' : 'M'}${x(p.i)},${yy(f(p))}`).join('');
+  const hasWind = pts.some(p => p.wind != null);
+  $('#chart').innerHTML = `<svg viewBox="0 0 ${W} ${Hs}" role="img" aria-label="Generation, demand and wind over the day">
+    ${[0, 10, 20, 30, 40, 50].filter(v => v <= ymax).map(v => `<line class="grid" x1="${PAD.l}" x2="${W - PAD.r}" y1="${y(v)}" y2="${y(v)}"/><text x="${PAD.l - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join('')}
+    <text x="${PAD.l}" y="${top + 2}" dx="4" dy="8">MW</text>
+    <path class="other" d="${area(() => 0, p => p.other)}"/>
+    <path class="managed" d="${area(p => p.other, p => p.other + p.managed)}"/>
+    <path class="demand" d="${line(p => p.dem, y)}"/>
+    ${hasWind ? `${[0, 15, 30].map(v => `<line class="grid" x1="${PAD.l}" x2="${W - PAD.r}" y1="${yw(v)}" y2="${yw(v)}"/><text x="${PAD.l - 6}" y="${yw(v) + 4}" text-anchor="end">${v}</text>`).join('')}
+      <text x="${PAD.l}" y="${windT}" dx="4" dy="-4" style="fill:var(--s1)">wind, m/s</text>
+      <path class="windfill" d="${line(p => p.wind, yw)}L${x(pts.at(-1).i)},${yw(0)}L${x(pts[0].i)},${yw(0)}Z"/><path class="wind" d="${line(p => p.wind, yw)}"/>`
+      : `<text x="${PAD.l}" y="${(windT + windB) / 2}" dx="4">Wind data not available for this day</text>`}
+    ${[0, 6, 12, 18, 24].map(h => `<text x="${x(Math.min(47, h * 2))}" y="${Hs - 4}" text-anchor="middle">${String(h).padStart(2, '0')}:00</text>`).join('')}
+    <line class="cursor" id="cursor" y1="${top}" y2="${windB}"/>
+    <rect id="hit" x="${PAD.l}" y="0" width="${W - PAD.l - PAD.r}" height="${Hs}" fill="transparent"/>
+  </svg>`;
+  cur.x = x;
+  const hit = $('#hit'), pick = e => { const r = hit.getBoundingClientRect(); show(Math.round(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * 47)); };
+  hit.addEventListener('pointermove', e => { if (!timer) pick(e); });
+  hit.addEventListener('pointerdown', e => { stop(); pick(e); });
+}
+
+function show(i) {
+  idx = i; $('#slider').value = i;
+  if (!cur) return;
+  const p = cur.pts.reduce((a, b) => Math.abs(b.i - i) < Math.abs(a.i - i) ? b : a);
+  const c = $('#cursor'); c.setAttribute('x1', cur.x(p.i)); c.setAttribute('x2', cur.x(p.i));
+  const time = `${String(Math.floor(p.i / 2)).padStart(2, '0')}:${p.i % 2 ? '30' : '00'}`;
+  $('#now').innerHTML = `<div class="t"><b>${time}</b><span>UTC</span></div>
+    <div><b>${p.wind == null ? 'n/a' : fmt(p.wind, 1)}</b><span>wind, m/s</span></div>
+    <div><b>${fmt(p.dem, 1)}</b><span>demand, MW</span></div>
+    <div><b style="color:var(--s2)">${fmt(p.managed, 1)}</b><span>managed, MW</span></div>
+    <div><b>${fmt(p.other, 1)}</b><span>other, MW</span></div>`;
+  $('#ork').textContent = `Using ${fmt(p.dem, 1)} MW, making ${fmt(p.managed + p.other, 1)} MW.`;
+  const f = p.flow, w = Math.min(28, 2 + Math.abs(f) * 0.9), a = $('#arrow');
+  a.classList.toggle('imp', f < 0);
+  a.setAttribute('points', f >= 0 ? `0,${30 - w / 2} 96,${30 - w / 2} 96,${30 - w / 2 - 6} 120,30 96,${30 + w / 2 + 6} 96,${30 + w / 2} 0,${30 + w / 2}` : `120,${30 - w / 2} 24,${30 - w / 2} 24,${30 - w / 2 - 6} 0,30 24,${30 + w / 2 + 6} 24,${30 + w / 2} 120,${30 + w / 2}`);
+  $('#flowlbl').textContent = `${f >= 0 ? 'export' : 'import'} ${fmt(Math.abs(f), 1)} MW`;
+}
+
+function stop() { if (timer) { clearInterval(timer); timer = null; } $('#play').textContent = 'Play'; }
+$('#play').addEventListener('click', () => {
+  if (timer) return stop();
+  if (idx >= 47) show(0);
+  $('#play').textContent = 'Pause';
+  timer = setInterval(() => { if (idx >= 47) return stop(); show(idx + 1); }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 600 : 220);
+});
+$('#slider').addEventListener('input', e => { stop(); show(+e.target.value); });
+$('#date').addEventListener('change', e => { if (e.target.value) load(e.target.value); });
+$('#days').innerHTML = DAYS.map(x => `<button data-d="${x.d}" aria-pressed="false">${x.label}<small>${new Date(x.d + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}</small></button>`).join('');
+$('#days').addEventListener('click', e => { const b = e.target.closest('button[data-d]'); if (b) load(b.dataset.d); });
+const q = new URLSearchParams(location.search).get('day');
+load(q && /^\d{4}-\d\d-\d\d$/.test(q) && q >= '2016-02-02' && q <= '2025-12-31' ? q : DAYS[0].d);
+</script>
+</body>
+</html>
