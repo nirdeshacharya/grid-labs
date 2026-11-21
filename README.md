@@ -1,6 +1,6 @@
 # Grid Labs
 
-A public notebook of experiments on the open data published by Scottish and Southern Electricity Networks (SSEN) Distribution. Companion to [Grid Lens](https://nirdeshacharya.github.io/grid-lens/), which shows the data as published.
+A public notebook of experiments on the open data published by Scottish and Southern Electricity Networks (SSEN) Distribution.
 
 Each entry asks one question, shows the method, states the result and lists what the result cannot support. Entry 01 recomputes its figures from SSEN's data in the reader's browser each time the page opens. Entries 02 and 04 are dated snapshots; the scripts that produced them are in `analysis/`.
 
