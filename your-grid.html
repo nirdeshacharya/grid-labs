@@ -24,12 +24,15 @@
   .hero svg circle { fill: var(--signal); stroke: var(--ink); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
   .kicker { font: 500 13px var(--mono); color: var(--ink-3); margin: 0 0 4px; }
   .big { font: 600 26px/1.25 var(--cond); margin: 0 0 14px; max-width: none; }
-  .chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
-  .chain > span { position: relative; font-size: 14px; font-weight: 500; background: var(--fill); border-radius: 2px; padding: 6px 10px; }
-  .chain > span + span::before { content: "→"; position: absolute; left: -11px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--ink-3); }
-  .chain > span.me { background: var(--ink); color: var(--panel); }
-  .chain > span.me .term { text-decoration-color: currentColor; }
-  .chain > span.you { background: var(--signal); color: #15211e; }
+  .chain { display: flex; flex-wrap: wrap; gap: 6px 4px; align-items: stretch; }
+  .chain .step { display: inline-flex; align-items: center; gap: 4px; }
+  .chain .step::after { content: "→"; font-size: 12px; color: var(--ink-3); }
+  .chain .step:last-child::after { content: none; }
+  .chain .c { font-size: 14px; font-weight: 500; background: var(--fill); border-radius: 2px; padding: 6px 10px; align-self: stretch; }
+  .chain .c.me { background: var(--ink); color: var(--panel); }
+  .chain .c.me .term { text-decoration-color: currentColor; }
+  .chain .c.you { background: var(--signal); color: #15211e; }
+  .chain .c.tx { background: none; box-shadow: inset 0 0 0 1px var(--rule); }
   .chain small { display: block; font-size: 11.5px; font-weight: 400; opacity: .75; }
   .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; padding: 14px 16px 12px; min-width: 0; }
@@ -62,7 +65,6 @@
   .tl b { position: absolute; top: 3px; width: 4px; height: 20px; margin-left: -2px; background: var(--ink); border-radius: 1px; }
   .tlx { position: absolute; top: 26px; left: 0; right: 0; display: flex; justify-content: space-between; font: 10px var(--mono); color: var(--ink-3); }
   .now { display: flex; gap: 24px; flex-wrap: wrap; }
-  .chain > span.tx { background: none; border: 1px dashed var(--ink-3); }
   .term { text-decoration: underline dotted var(--ink-3); text-underline-offset: 3px; cursor: help; }
   .term:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
   .h3t { font: inherit; text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 4px; }
@@ -217,14 +219,20 @@ async function tell(pcRaw) {
   // the transmission side: who owns it and the voltage it arrives at, from the grid supply point's transformer ratio
   const gRow = hr && head.find(x => x['Substation Type'] === 'GSP' && x.Substation === hr['Upstream GSP']);
   const gspKv = gRow?.voltage__kv_ ? String(gRow.voltage__kv_).replace(/\s+/g, '') : null, txKv = gspKv ? Math.max(...gspKv.split('/').map(Number).filter(Number.isFinite)) : null;
-  const txOwner = a.a === 'SEPD' ? 'National Grid Electricity Transmission' : 'SSEN Transmission';
+  const txOwner = a.a === 'SEPD' ? 'National Grid Electricity Transmission' : 'SSEN Transmission', txShort = a.a === 'SEPD' ? 'National Grid' : 'SSEN Transmission';
   const node = gspName && nesoGsp(gspName);
 
   // header: where
   const head1 = `<div class="hero"><div>
       <p class="kicker">${esc(pc)}${approx ? ' (district centre)' : ''} · ${esc(town || '')}</p>
       <p class="big">Supplied from <b>${esc(sub)}</b>${hit.exact ? '' : ' (on the edge of its area)'}</p>
-      <div class="chain"><span class="tx">${term('tx', 'Transmission network')}<small>${esc(txOwner)}${txKv ? `, ${txKv} ${term('kv', 'kV')}` : ''}</small></span><span>${esc(gspName || '?')}<small>${term('gsp', 'grid supply point')}${gspKv ? `, ${esc(gspKv)} kV` : ''}</small></span>${bsp ? `<span>${esc(bsp)}<small>${term('bsp', 'bulk supply point')}</small></span>` : ''}<span class="me">${esc(sub)}<small>${term('primary', 'primary')}${a.lct ? `, ${fmt(a.lct.customers)} customers` : ''}</small></span><span class="you">${esc(pc)}<small>you</small></span></div>
+      <div class="chain">${[
+        ['tx', esc(txShort), `${term('tx', 'transmission')}${txKv ? `, ${txKv} ${term('kv', 'kV')}` : ''}`],
+        ['', esc(gspName || '?'), `${term('gsp', 'grid supply point')}${gspKv ? `, ${esc(gspKv)} kV` : ''}`],
+        ...(bsp ? [['', esc(bsp), term('bsp', 'bulk supply point')]] : []),
+        ['me', esc(sub), `${term('primary', 'primary')}${a.lct ? `, ${fmt(a.lct.customers)} customers` : ''}`],
+        ['you', esc(pc), 'you'],
+      ].map(([cls, name, role]) => `<span class="step"><span class="c ${cls}" title="${cls === 'tx' ? esc(txOwner) : ''}">${name}<small>${role}</small></span></span>`).join('')}</div>
     </div><figure>${outline(a, lon, lat)}<figcaption class="small">The area ${esc(sub)} serves. The dot is ${esc(pc)}.</figcaption></figure></div>`;
   text.push(`${esc(pc)} is in ${esc(town || 'SSEN\'s area')}, in SSEN's ${a.a === 'SEPD' ? 'southern' : 'northern'} licence area, supplied from ${esc(sub)} primary substation${a.lct ? ` (about ${fmt(a.lct.customers)} customers)` : ''}${gspName ? `, fed through ${bsp ? esc(bsp) + ' bulk supply point and ' : ''}${esc(gspName)} grid supply point` : ''}.`);
 
