@@ -286,7 +286,7 @@ async function tell(pcRaw) {
   const d = a.dist && A.districts[a.dist], dn = a.dist && DISTRICT[a.dist.split('/').slice(1).join('/')];
   if (d) {
     const routine = d.windyDays > 250, val = routine ? d.own : d.ratio, vals = Object.values(A.districts).map(x => routine ? x.own : x.ratio).filter(v => v != null);
-    cards.push(card(`Storm days in ${esc(dn)}`, `<p class="num">${fmt(val, 1)}<small>× the usual faults</small></p>${strip(vals, val, `${dn}: ${fmt(val, 1)} times; each tick is another district`, v => fmt(v, 0) + '×')}<p class="note">${routine ? `On its own windiest days. 50 mph is routine here (${fmt(d.windyDays)} days in ten years).` : `On days with 50 mph gusts (${fmt(d.windyDays)} in ten years).`}${d.windyDays < 70 && d.without3 ? ` Rough: about ${fmt(d.without3, 1)}× without its 3 worst days.` : ''} <a href="02-wind-and-faults.html">Entry 02</a></p>`));
+    cards.push(card(`Storm days in ${esc(dn)}`, `<p class="num">${fmt(val, 1)}<small>× the usual faults</small></p>${strip(vals, val, `${dn}: ${fmt(val, 1)} times; each tick is another district`, v => fmt(v, 0) + '×')}<p class="note">${routine ? `On its own windiest days. 50 mph is routine here (${fmt(d.windyDays)} days in ten years).` : `On days with 50 mph gusts (${fmt(d.windyDays)} in ten years).`}${d.windyDays < 70 && d.without3 ? ` Without its 3 worst days, roughly ${fmt(d.without3, 1)}×.` : ''} <a href="02-wind-and-faults.html">Entry 02</a></p>`));
     text.push(`In the ${esc(dn)} fault district, ${routine ? `its own windiest days bring about ${fmt(d.own, 1)} times the usual faults` : `days with 50 mph gusts bring about ${fmt(d.ratio, 1)} times the usual faults`}.`);
   }
 
