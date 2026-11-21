@@ -170,7 +170,7 @@ function render(R) {
   <p>Overhead lines: <b>${esc(R.sources.lines.name)}</b>, updated ${day(R.sources.lines.modified)}. Fault records: ${R.sources.faults.map((s, i) => `<b>${esc(s.name)}</b> (${['north of Scotland', 'southern England'][i]}), updated ${day(s.modified)}`).join('; ')}. All SSEN Distribution open data.</p>
   <p>The result file is <a href="data/05-lines.json">data/05-lines.json</a>. The script that produced it, <span class="n">05-run.html</span>, is in the <a href="https://github.com/nirdeshacharya/grid-labs/tree/main/analysis">analysis folder</a> of the repository and runs in a browser.</p>`;
 }
-getJSON('data/05-lines.json').then(render).catch(e => { $('#out').innerHTML = `<p class="err">The result file could not be loaded: ${esc(e.message)}.</p>`; });
+getJSON('data/05-lines.json?v=2').then(render).catch(e => { $('#out').innerHTML = `<p class="err">The result file could not be loaded: ${esc(e.message)}.</p>`; });
 </script>
 </body>
 </html>
