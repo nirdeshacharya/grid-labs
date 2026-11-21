@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orkney curtailment · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .dots { display: grid; grid-template-columns: 48px 1fr 64px; gap: 6px 10px; align-items: center; font-size: 13px; }
+  .dots .trk { position: relative; height: 16px; background: linear-gradient(var(--ink-3), var(--ink-3)) no-repeat var(--zero) 0 / 1px 100%; border-bottom: 1px solid var(--rule); }
+  .dots .trk i { position: absolute; top: 3px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; border: 1.5px solid var(--panel); }
+  .dots .axis { grid-column: 2; position: relative; height: 18px; font: 11px var(--mono); color: var(--ink-3); }
+  .dots .axis span { position: absolute; transform: translateX(-50%); }
+  .dots .lab, .dots .val { font: 12px var(--mono); color: var(--ink-2); }
+  .dots .val { text-align: right; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 560px) { .two { grid-template-columns: 1fr; } }
+  .two .colchart { height: 120px; gap: 1px; }
+  .two h3 { font: 600 14px var(--sans); margin: 0 0 8px; }
+  .xax { position: relative; height: 16px; margin-top: 4px; font: 11px var(--mono); color: var(--ink-3); }
+  .xax span { position: absolute; transform: translateX(-50%); }
+</style>
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a></nav></div></header>
+<main>
+  <div class="entry">Entry 06 <span class="status finding">Finding</span> <span class="small">· posted 21 November 2026</span></div>
+  <h1>How much Orkney wind does active network management switch off?</h1>
+  <p class="lede">Ten years of half-hourly output from the generators Orkney's network holds back when it has to, set against the island's wind and the generators it never holds back.</p>
+  <p>Orkney makes more electricity than it uses for much of the year, and its links to the Scottish mainland can only carry so much. For more than a decade SSEN has connected extra generators on the understanding that they can be turned down when the network is full, under a control system called active network management (ANM). SSEN publishes their combined output, but not how much they were held back. This entry estimates it.</p>
+  <div id="out"><p class="loading">Loading the data…</p></div>
+  <footer>Part of <a href="./">Grid Labs</a>. A personal project, built in my own time from public open data. Not an SSEN product and not SSEN's view. These are estimates from published totals, not SSEN's curtailment figures.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+const METHODS = [['switchOff', 'Complete switch-offs', '--s2'], ['exportLimit', 'Export limit', '--s1'], ['demand', 'Low demand', '--violet']];
+const N = (v, d = 0) => `<b class="n">${fmt(v, d)}</b>`;
+const P = (v, d = 1) => `<b class="n">${fmt(v, d)}%</b>`;
+const longDate = s => new Date(s.length > 10 ? s + ':00Z' : s + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+const monthName = m => new Date(m + '-15T12:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+function render(R) {
+  const Y = R.years, first = Y[0].y, last = Y.at(-1).y;
+  const shares = Y.flatMap(y => METHODS.map(([k]) => y[k].share));
+  const lo = Math.min(-2, Math.floor(Math.min(...shares))), hi = Math.max(3, Math.ceil(Math.max(...shares)));
+  const x = v => (v - lo) / (hi - lo) * 100;
+  const best = Y.map(y => Math.max(...METHODS.map(([k]) => y[k].share)));
+  const gapLoss = y => Math.max(0, 1 - y.yieldAnm / y.yieldOther);
+  const before = Y.filter(y => y.y <= 2018), after = Y.filter(y => y.y >= 2019);
+  const gapAfter = after.map(gapLoss).sort((a, b) => a - b), gapBefore = before.map(y => (y.yieldOther - y.yieldAnm) * 100);
+  const big = R.spells.slice(0, 2), oct = big.every(s => s.start.startsWith('2025-10'));
+  const hmaxA = Math.max(...R.hist.anm.counts), hmaxE = Math.max(...R.hist.export.counts);
+  const xax = (h, step) => { const span = h.counts.length * h.step; return `<div class="xax">${Array.from({ length: Math.floor(span / step) + 1 }, (_, i) => h.lo + i * step).map(v => `<span style="left:${(v - h.lo) / span * 100}%">${v}${v + step > h.lo + span ? ' MW' : ''}</span>`).join('')}</div>`; };
+  const yx = v => v / 0.6 * 100;   // yield axis, 0 to 60%
+  const worst = Y.reduce((a, y) => y.exportLimit.share > a.exportLimit.share ? y : a);
+
+  $('#out').innerHTML = `
+  <p class="snapshot">Snapshot: computed ${day(R.computed)} from SSEN's half-hourly Orkney ANM data for ${day(R.period[0])} to ${day(R.period[1])}. It does not recompute when the page opens, because it needs ten years of hourly weather.</p>
+
+  <h2>Short answer</h2>
+  <div class="answer">
+    <p>Up to about ${P(Math.max(...best), 0)} of what the managed generators could have made in a year can be traced to the network being full, on the links to the mainland or when Orkney's demand is low. In quieter years it is under ${P(Math.ceil(best.filter(v => v < 3).sort((a, b) => a - b)[Math.floor(best.filter(v => v < 3).length / 2)]), 0)}. It may be much more: since 2019 the managed generators have made about ${P(gapAfter[Math.floor(gapAfter.length / 2)] * 100, 0)} less than the other generators would suggest, and the public data cannot tell whether that is a steady cap or just different machines.</p>
+  </div>
+  <p>The clearest losses come in particular months. In ${worst.y}, the worst year by the export measure, ${P(worst.exportLimit.share)} was held back. ${R.lowExportMonths.length ? `${(m => `In ${monthName(m.m)}, the ${ordinal(m.windRank)} windiest of the ${m.months} months in the record, export to the mainland never rose above ${N(m.cap, 0)} MW, about half its usual ceiling. The managed generators averaged ${N(m.anm, 1)} MW${m.prev ? `, against ${N(m.prev.anm, 1)} MW in ${monthName(m.prev.m)}, while the other generators made much the same in both (${fmt(m.other, 1)} and ${fmt(m.prev.other, 1)} MW)` : ''}. That looks like a link to the mainland out of service.`)(R.lowExportMonths.reduce((a, b) => a.windRank < b.windRank ? a : b))}` : ''}</p>
+  ${oct ? `<p>The longest complete switch-off does not look like routine curtailment either. From ${longDate(big[1].start)}, the managed generators produced almost nothing for about two days while the wind blew and Orkney's other generators ran: ${N(big[0].lostMWh + big[1].lostMWh)} MWh lost. The data does not say why.</p>` : ''}
+  <p>Even the low end is an average. SSEN publishes the managed generators' combined output only, so this cannot show how the holding back was shared. Under schemes like this the most recently connected generators are usually turned down first, so a few may lose far more than these figures.</p>
+
+  <h2>Three estimates of curtailment you can see</h2>
+  <div class="key">${METHODS.map(([, l, c]) => `<span><i class="sq" style="background:var(${c});border-radius:50%"></i>${l}</span>`).join('')}</div>
+  <figure>
+    <div class="dots" style="--zero:${x(0)}%">
+      <div></div><div class="axis">${Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).filter(v => (hi - lo) <= 6 || v % 2 === 0).map(v => `<span style="left:${x(v)}%">${v}%</span>`).join('')}</div><div></div>
+      ${Y.map(y => `<div class="lab">${y.y}</div>
+        <div class="trk">${METHODS.map(([k, l, c]) => `<i style="left:${x(y[k].share)}%;background:var(${c})" data-tip="${y.y}, ${l}\n${fmt(y[k].share, 1)}% of possible output\n${fmt(y[k].lostGWh, 2)} GWh"></i>`).join('')}</div>
+        <div class="val">${fmt(y.anmGWh)} GWh</div>`).join('')}
+    </div>
+    <figcaption>Energy held back as a share of what the managed generators could have made, by year and method. The right column is what they did make. Values below zero mean the method found no loss beyond its own noise. ${first} starts on ${day(R.period[0])}.</figcaption>
+  </figure>
+  <ul>
+    <li><b>Complete switch-offs</b> counts half-hours with wind of at least ${R.thresholds.strongWind} m/s and at least ${R.thresholds.strongOther} MW from the other generators, when the managed generators made less than a quarter of their usual share. It sees only near-total shutdowns, not the partial turning down that is ANM's normal way of working, so it is a floor.</li>
+    <li><b>Export limit</b> compares the managed generators' output with what they made, alongside the same output from the other generators, at times when demand left plenty of room on the links to the mainland. The limit is set month by month, so a link out of service counts. With one limit for the whole year the estimates are lower, at most ${P(Math.max(...Y.map(y => y.exportLimitYearly.share)))}.</li>
+    <li><b>Low demand</b> compares half-hours in the same month and the same wind, split by Orkney's demand. It measures the managed generators against the other generators, so effects that hit both, such as denser winter air, cancel out.</li>
+  </ul>
+
+  <h2>The gap that may be curtailment</h2>
+  <p>All three estimates compare the managed generators with themselves or with the other generators in different conditions. A cap that is on all the time would not show up in any of them. One way to look for it: how much each group of generators makes on average, as a share of the most it ever makes.</p>
+  <figure>
+    <div class="dots" style="--zero:0%">
+      <div></div><div class="axis">${[0, 10, 20, 30, 40, 50, 60].map(v => `<span style="left:${yx(v / 100)}%">${v}%</span>`).join('')}</div><div></div>
+      ${Y.map(y => `<div class="lab">${y.y}</div>
+        <div class="trk" data-tip="${y.y}\nManaged generators: ${fmt(y.yieldAnm * 100)}% of their top output on average\nOther generators: ${fmt(y.yieldOther * 100)}%"><i style="left:${yx(y.yieldAnm)}%;background:var(--s2)"></i><i style="left:${yx(y.yieldOther)}%;background:var(--na)"></i></div>
+        <div class="val">${fmt((y.yieldOther - y.yieldAnm) * 100)} pts</div>`).join('')}
+    </div>
+    <figcaption>Average output as a share of each group's top level (the 99.9th percentile of its half-hours). Orange: managed generators. Grey: other generators. The right column is the gap in percentage points.</figcaption>
+  </figure>
+  <p>Up to 2018 the two groups were within ${N(Math.max(...gapBefore), 0)} points of each other. From 2019 the managed generators fell ${N(Math.min(...after.map(y => (y.yieldOther - y.yieldAnm) * 100)), 0)} to ${N(Math.max(...after.map(y => (y.yieldOther - y.yieldAnm) * 100)), 0)} points behind and stayed there. If all of that gap were curtailment, they lost ${P(gapAfter[0] * 100, 0)} to ${P(gapAfter.at(-1) * 100, 0)} of their possible output each year since. It may instead come from the machines: new or repowered turbines among the other generators, older or less windy sites among the managed ones, or a change in which generators are counted in each group. SSEN publishes neither the managed generators' capacity nor a list of them, and its capacity register does not mark Orkney's generators as flexible connections, so this cannot be settled from public data.</p>
+
+  <h2>How output and export top out</h2>
+  <div class="two">
+    <figure>
+      <h3>Managed generators' output</h3>
+      <div class="colchart">${R.hist.anm.counts.map((n, i) => `<div class="c" data-tip="${fmt(R.hist.anm.lo + i * R.hist.anm.step, 1)} to ${fmt(R.hist.anm.lo + (i + 1) * R.hist.anm.step, 1)} MW: ${fmt(n)} half-hours"><i class="b" style="height:${n / hmaxA * 100}%"></i></div>`).join('')}</div>
+      ${xax(R.hist.anm, 5)}
+    </figure>
+    <figure>
+      <h3>Export to the mainland</h3>
+      <div class="colchart">${R.hist.export.counts.map((n, i) => `<div class="c" data-tip="${fmt(R.hist.export.lo + i * R.hist.export.step, 1)} to ${fmt(R.hist.export.lo + (i + 1) * R.hist.export.step, 1)} MW: ${fmt(n)} half-hours"><i class="a" style="height:${n / hmaxE * 100}%"></i></div>`).join('')}</div>
+      ${xax(R.hist.export, 8)}
+    </figure>
+  </div>
+  <p class="small" style="margin-top:-8px">Half-hours at each level, ${first} to ${last}. Export is Orkney's generation minus its demand; only half-hours when Orkney was exporting are shown.</p>
+  <p>The managed generators' output piles up below about ${N(Math.max(...Y.map(y => y.anmCap)), 0)} MW and almost never goes above it. Their output keeps climbing toward that level until the wind reaches about 18 m/s, well after the other generators level off. That could be turbines that reach full output at a higher wind speed, or curtailment that only eases in the strongest winds, and a wall like this fits either. Export shows no wall: it thins out gradually, and in a typical year it is within 2 MW of its highest level for only ${P(Y.reduce((a, y) => a + y.nearCapPct, 0) / Y.length, 1)} of half-hours.</p>
+
+  <h2>Longest complete switch-offs</h2>
+  <div class="scroll"><table><thead><tr><th>Started (UTC)</th><th class="r">Hours</th><th class="r">Average wind, m/s</th><th class="r">Estimated MWh lost</th></tr></thead><tbody>
+    ${R.spells.map(s => `<tr><td>${longDate(s.start)} ${s.start.slice(11)}</td><td class="r">${fmt(s.hours, 1)}</td><td class="r">${fmt(s.wind, 1)}</td><td class="r">${fmt(s.lostMWh)}</td></tr>`).join('')}
+  </tbody></table></div>
+  <p class="small">Runs of consecutive half-hours meeting the switch-off test. A fault, maintenance or a communications failure would look the same as deliberate curtailment here.</p>
+
+  <h2>Orkney year by year</h2>
+  <div class="scroll"><table><thead><tr><th>Year</th><th class="r">Generation, GWh</th><th class="r">Demand, GWh</th><th class="r">Managed share of generation</th><th class="r">Half-hours exporting</th><th class="r">Highest export, MW</th><th class="r">Managed output ceiling, MW</th></tr></thead><tbody>
+    ${Y.map(y => `<tr><td>${y.y}</td><td class="r">${fmt(y.genGWh)}</td><td class="r">${fmt(y.demGWh)}</td><td class="r">${fmt(y.anmShare * 100)}%</td><td class="r">${y.netExporterPct}%</td><td class="r">${fmt(y.exportCap, 1)}</td><td class="r">${fmt(y.anmCap, 1)}</td></tr>`).join('')}
+  </tbody></table></div>
+  <p class="small">“Highest” and “ceiling” are the 99.9th percentile of each year's half-hours, so a handful of odd readings do not set them. Generation excludes small generators under 50 kW, which SSEN does not include in these totals.</p>
+
+  <h2>Checks</h2>
+  <ul>
+    <li>Are the wind and the output lined up in time? The other generators' output tracks the wind most closely with no shift, so the data's times and the weather's UTC times agree.</li>
+    <li>Does the yearly export limit hide anything? Yes: setting it month by month raises the export estimate, most in ${Y.filter(y => y.exportLimit.share - y.exportLimitYearly.share > 3).map(y => y.y).join(' and ')}, because it counts months when the limit was lower.</li>
+    <li>Do negative values mean the methods are biased? They range down to ${P(Math.min(...shares))}, which gives a sense of the noise. Differences of a percentage point or two between years are within it.</li>
+  </ul>
+
+  <h2>Method</h2>
+  <ol>
+    <li>Read SSEN's ten yearly files of half-hourly averages: output of the ANM generators, total Orkney generation and Orkney demand. The columns are labelled kW but the values are plainly MW, so they are treated as MW. The other generators' output is total generation minus ANM output.</li>
+    <li>Take hourly wind speed at 100 m for central Orkney Mainland (${R.wind.lat}° N, ${Math.abs(R.wind.lon)}° W) from the Open-Meteo historical weather API, which serves the ERA5 reanalysis, and interpolate it to each half-hour.</li>
+    <li>Estimate what the managed generators could have made three ways, as described above, separately for each year, since the generators on the system change.</li>
+    <li>Report each estimate as the energy held back divided by what was made plus what was held back.</li>
+    <li>For the gap, divide each group's average output by its 99.9th percentile half-hour in the same year.</li>
+  </ol>
+
+  <h2>What this cannot tell you</h2>
+  <ul>
+    <li>It cannot show any one generator's losses. The data is a single total for all the managed generators.</li>
+    <li>It cannot tell a steady cap from lower capacity. Without the managed generators' capacity, the gap above stays unexplained.</li>
+    <li>The other generators are a stand-in for the wind the managed ones see. They include sites of different ages and, in the capacity register, tidal and oil-fired units as well as wind. Their own outages and repowering shift every comparison here.</li>
+    <li>One weather point covers Orkney, and reanalysis smooths the wind over tens of kilometres and to hourly values. ANM acts on constraints that change minute by minute and differ between islands.</li>
+    <li>SSEN says this data comes straight from its control system with no cleaning. ${fmt(R.issues.negativeAnm)} half-hours show slightly negative ANM output, likely the generators' own consumption when idle, and ${fmt(R.issues.negativeDemand)} show negative demand.</li>
+    <li>Turning down for the national system operator, when the wider grid is congested, is a separate mechanism. If it applies to any of these generators it also appears here as lower output.</li>
+  </ul>
+
+  <h2>Data and reproduction</h2>
+  <p>Orkney ANM: ${R.sources.length} files of <b>Half Hourly average data for Orkney ANM</b>, SSEN Distribution open data, the latest updated ${day(R.sources.map(s => s.modified).sort().at(-1))}. Weather: <a href="https://open-meteo.com">Open-Meteo</a> historical weather API.</p>
+  <p>The result file is <a href="data/06-orkney.json">data/06-orkney.json</a>. The scripts that produced it are in the <a href="https://github.com/nirdeshacharya/grid-labs/tree/main/analysis">analysis folder</a> of the repository: <span class="n">fetch_orkney_wind.py</span> downloads the weather and <span class="n">06-run.html</span> does the rest in a browser.</p>`;
+}
+getJSON('data/06-orkney.json?v=2').then(render).catch(e => { $('#out').innerHTML = `<p class="err">The result file could not be loaded: ${esc(e.message)}.</p>`; });
+</script>
+</body>
+</html>
