@@ -1,0 +1,84 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Entry 10 analysis run</title>
+<!-- Reproduces the figures in entry 10. Steps:
+     1. python3 analysis/fetch_wind.py          (entry 02's daily district gusts, analysis/cache/wind.json)
+     2. python3 -m http.server 5179             (from the repository root)
+     3. open http://localhost:5179/analysis/10-run.html and save the JSON into data/10-storms.json
+     For the windiest days of 2017-2025 in SSEN's districts, and a sample of calm days, it sets SSEN's high-voltage
+     faults against GB wind farms' unplanned outage notices (REMIT, from Elexon) and GB wind output (Elexon FUELHH). -->
+<body style="font:13px ui-monospace,Menlo,monospace;white-space:pre-wrap;padding:16px">running…
+<script src="../lab.js"></script>
+<script>
+const HV = { SHEPD: '245d5825-7d83-4d17-a2c5-04b473b9b408', SEPD: 'f0d9d3fe-6739-4700-a699-f227b4e1de41' };
+const ELEXON = 'https://data.elexon.co.uk/bmrs/api/v1';
+const PLANNED = new Set(['75', '86']), FROM = '2017-01-01', TO = '2025-12-31';
+const N_STORM = 30, N_CALM = 40, N_WINDY = 30;   // the windiest days; a sample of calm days; a sample of windy-but-not-storm days
+const status = t => { document.body.textContent = t; };
+const r1 = x => Math.round(x * 10) / 10;
+const addDays = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+const rng = (s => () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; })(20261122);
+const pick = (arr, n) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a.slice(0, n); };
+
+// wind farms' unplanned outage notices that overlap day D: the latest revision of each, published by D+3
+async function remitFor(D) {
+  const recs = [];
+  for (let k = -1; k <= 3; k++) {
+    const a = addDays(D, k), b = addDays(D, k + 1);
+    const j = await getJSON(`${ELEXON}/datasets/REMIT?publishDateTimeFrom=${a}T00:00Z&publishDateTimeTo=${b}T00:00Z`).catch(() => ({ data: [] }));
+    recs.push(...(j.data || []));
+  }
+  const latest = new Map();
+  for (const r of recs) if (/wind/i.test(r.fuelType || '') && r.unavailabilityType === 'Unplanned') { const p = latest.get(r.mrid); if (!p || r.revisionNumber > p.revisionNumber) latest.set(r.mrid, r); }
+  const d0 = Date.parse(D + 'T00:00:00Z'), d1 = d0 + 864e5;
+  let mw = 0, mwWeather = 0, units = new Set(), causes = {};
+  for (const r of latest.values()) {
+    if (r.eventStatus === 'Dismissed') continue;
+    const s = Date.parse(r.eventStartTime), e = Date.parse(r.eventEndTime || r.eventStartTime);
+    const ov = Math.max(0, Math.min(e, d1) - Math.max(s, d0)) / 864e5; if (!ov) continue;
+    const lost = Math.max(0, (+r.normalCapacity || 0) - (+r.availableCapacity || 0)) || (+r.unavailableCapacity || 0);
+    mw += lost * ov; units.add(r.assetId || r.affectedUnit);
+    const c = r.cause || 'Not given'; causes[c] = (causes[c] || 0) + lost * ov;
+    if (/ambient|weather|wind|storm|icing/i.test(c)) mwWeather += lost * ov;
+  }
+  return { mw: Math.round(mw), mwWeather: Math.round(mwWeather), units: units.size, causes: Object.fromEntries(Object.entries(causes).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => [k, Math.round(v)])) };
+}
+// GB transmission-connected wind output that day, and the day before
+async function windOutput(D) {
+  const j = await getJSON(`${ELEXON}/datasets/FUELHH?settlementDateFrom=${addDays(D, -1)}&settlementDateTo=${D}&fuelType=WIND`).catch(() => ({ data: [] }));
+  const by = d => (j.data || []).filter(x => x.settlementDate === d).map(x => x.generation);
+  const today = by(D), before = by(addDays(D, -1)), mean = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : null;
+  return { mean: today.length ? Math.round(mean(today)) : null, min: today.length ? Math.min(...today) : null, max: today.length ? Math.max(...today) : null, dayBefore: before.length ? Math.round(mean(before)) : null };
+}
+
+async function run() {
+  status('reading faults and gusts…');
+  const [W, n, s] = await Promise.all([getJSON('cache/wind.json'), fetchAll(HV.SHEPD, ['HV_INCIDENT_TIME', 'CAUSE_CODE', 'HV_CUST_AFF']), fetchAll(HV.SEPD, ['HV_INCIDENT_TIME', 'CAUSE_CODE', 'HV_CUST_AFF'])]);
+  const faults = {}, cust = {};
+  for (const r of [...n, ...s]) { if (PLANNED.has(String(r.CAUSE_CODE))) continue; const d = String(r.HV_INCIDENT_TIME).slice(0, 10); faults[d] = (faults[d] || 0) + 1; cust[d] = (cust[d] || 0) + (+r.HV_CUST_AFF || 0); }
+  const keys = Object.keys(W.gust);
+  const days = W.days.map((d, i) => ({ d, i, gusts: keys.map(k => W.gust[k][i]).filter(x => x != null) })).filter(x => x.d >= FROM && x.d <= TO && x.gusts.length)
+    .map(x => ({ d: x.d, meanGust: x.gusts.reduce((a, b) => a + b, 0) / x.gusts.length, maxGust: Math.max(...x.gusts), over50: x.gusts.filter(g => g >= 50).length }));
+  const byStorm = [...days].sort((a, b) => b.meanGust - a.meanGust);
+  // keep storm days at least two days apart, so one storm is not counted twice
+  const storms = []; for (const x of byStorm) { if (storms.length >= N_STORM) break; if (storms.every(y => Math.abs(Date.parse(y.d) - Date.parse(x.d)) > 1.5 * 864e5)) storms.push(x); }
+  const calm = pick(days.filter(x => x.maxGust < 30), N_CALM), windy = pick(days.filter(x => x.over50 >= 1 && x.over50 <= 3 && !storms.some(y => y.d === x.d)), N_WINDY);
+  const groups = [['storm', storms], ['windy', windy], ['calm', calm]];
+  const sorted = Object.values(faults).sort((a, b) => a - b), median = sorted[Math.floor(sorted.length / 2)];
+  const out = []; let done = 0, total = storms.length + windy.length + calm.length;
+  for (const [g, list] of groups) for (const x of list) {
+    const [rm, wo] = await Promise.all([remitFor(x.d), windOutput(x.d)]);
+    out.push({ group: g, d: x.d, meanGust: r1(x.meanGust), maxGust: Math.round(x.maxGust), over50: x.over50, faults: faults[x.d] || 0, customers: cust[x.d] || 0, remit: rm, wind: wo });
+    status(`${++done} of ${total} days`);
+  }
+  const summary = Object.fromEntries(groups.map(([g]) => { const xs = out.filter(o => o.group === g), avg = f => xs.reduce((a, o) => a + f(o), 0) / xs.length;
+    return [g, { days: xs.length, faults: r1(avg(o => o.faults)), faultsX: r1(avg(o => o.faults) / median), remitMW: Math.round(avg(o => o.remit.mw)), remitWeatherMW: Math.round(avg(o => o.remit.mwWeather)), windMeanMW: Math.round(avg(o => o.wind.mean ?? 0)), windMinMW: Math.round(avg(o => o.wind.min ?? 0)) }]; }));
+  const spearman = (a, b) => { const rk = v => { const s = v.map((x, i) => [x, i]).sort((p, q) => p[0] - q[0]), r = []; s.forEach(([, i], j) => r[i] = j); return r; }; const ra = rk(a), rb = rk(b), n = a.length; return 1 - 6 * ra.reduce((s, x, i) => s + (x - rb[i]) ** 2, 0) / (n * (n * n - 1)); };
+  const st = out.filter(o => o.group === 'storm');
+  return { computed: new Date().toISOString(), from: FROM, to: TO, medianFaults: median, summary,
+    rankCorr: { faultsVsRemit: Math.round(spearman(st.map(o => o.faults), st.map(o => o.remit.mw)) * 100) / 100, faultsVsWindDrop: Math.round(spearman(st.map(o => o.faults), st.map(o => (o.wind.max ?? 0) - (o.wind.min ?? 0))) * 100) / 100 },
+    days: out };
+}
+run().then(r => { window._result = r; const s = JSON.stringify(r); status(`done, ${(s.length / 1024).toFixed(0)} KB`); })
+  .catch(e => { window._error = String(e); status('failed: ' + e); });
+</script>

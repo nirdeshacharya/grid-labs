@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wires or wind farms · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 12px 0 6px; }
+  @media (max-width: 620px) { .trio { grid-template-columns: 1fr; } }
+  .trio .p h3 { font: 600 13px var(--sans); margin: 0 0 8px; }
+  .trio .row { display: grid; grid-template-columns: 52px 1fr 64px; gap: 6px; align-items: center; font-size: 12.5px; margin: 4px 0; }
+  .trio .row .l { color: var(--ink-2); }
+  .trio .row .t { height: 14px; background: var(--fill); border-radius: 2px; }
+  .trio .row .t i { display: block; height: 100%; border-radius: 2px; }
+  .trio .row .v { font: 12px var(--mono); text-align: right; }
+  .trio .note { font-size: 12px; color: var(--ink-3); margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a></nav></div></header>
+<main>
+  <div class="entry">Entry 10 <span class="status finding">Finding</span> <span class="small">· posted 22 November 2026</span></div>
+  <h1>When a storm hits, who goes offline: the wires or the wind farms?</h1>
+  <p class="lede">The windiest days of 2017 to 2025 in SSEN's districts, set against GB wind farms' own outage notices and what they actually generated.</p>
+  <p>Entries 02 and 09 looked at storms from the network's side. Storms also hit generation: wind turbines shut themselves down when the wind gets too strong. So on the worst days, does the grid lose its wind farms as well as its wires?</p>
+  <div id="out"><p class="loading">Loading the data…</p></div>
+  <footer>Part of <a href="./">Grid Labs</a>. A personal project, built in my own time from public open data. Not an SSEN product and not SSEN's view. This compares published records; it is not an assessment of any company's assets.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+// Named storms, from public Met Office naming, matched by date. My addition; not in any of the data.
+const STORM = { '2017-02-23': 'Doris', '2018-01-02': 'Eleanor', '2018-01-24': 'Georgina', '2018-09-20': 'Bronagh', '2019-03-12': 'Gareth', '2020-02-09': 'Ciara', '2020-02-16': 'Dennis', '2020-02-29': 'Jorge',
+  '2020-10-31': 'Aiden', '2020-12-27': 'Bella', '2022-02-18': 'Eunice', '2022-02-20': 'Franklin', '2023-04-12': 'Noa', '2024-01-02': 'Henk', '2024-01-22': 'Isha', '2024-03-28': 'Nelson', '2024-11-24': 'Bert', '2024-12-07': 'Darragh', '2025-01-24': 'Éowyn' };
+const N = (v, d = 0) => `<b class="n">${fmt(v, d)}</b>`;
+const GW = v => fmt(v / 1000, 1);
+const longDate = s => new Date(s + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const GROUPS = [['calm', 'Calm'], ['windy', 'Windy'], ['storm', 'Storm']];
+
+function trio(R) {
+  const S = R.summary, panel = (title, f, fmtv, colour, note) => { const max = Math.max(...GROUPS.map(([g]) => f(S[g]))) || 1;
+    return `<div class="p"><h3>${title}</h3>${GROUPS.map(([g, l]) => `<div class="row"><span class="l">${l}</span><span class="t"><i style="width:${f(S[g]) / max * 100}%;background:var(${colour})"></i></span><span class="v">${fmtv(f(S[g]))}</span></div>`).join('')}${note ? `<p class="note">${note}</p>` : ''}</div>`; };
+  return `<div class="trio">
+    ${panel('SSEN high-voltage faults a day', s => s.faults, v => fmt(v), '--crit', `A normal day has about ${fmt(R.medianFaults)}.`)}
+    ${panel('GB wind output, average', s => s.windMeanMW, v => GW(v) + ' GW', '--s1', 'Transmission-connected wind farms.')}
+    ${panel('Wind capacity in outage notices', s => s.remitMW, v => fmt(v) + ' MW', '--na', 'Unplanned, averaged over the day.')}
+  </div>`;
+}
+
+function render(R) {
+  const S = R.summary, st = R.days.filter(d => d.group === 'storm').sort((a, b) => a.d.localeCompare(b.d));
+  const quiet = [...st].sort((a, b) => a.faults - b.faults).slice(0, 3), worst = [...st].sort((a, b) => b.faults - a.faults)[0];
+  const med = g => { const v = R.days.filter(d => d.group === g).map(d => d.faults).sort((a, b) => a - b); return v[Math.floor(v.length / 2)]; };
+  const meanYear = g => { const xs = R.days.filter(d => d.group === g); return xs.reduce((a, d) => a + +d.d.slice(0, 4) + (+d.d.slice(5, 7) - 0.5) / 12, 0) / xs.length; };
+  const before = st.filter(d => d.wind.dayBefore != null), beforeMean = before.reduce((a, d) => a + d.wind.dayBefore, 0) / before.length;
+  $('#out').innerHTML = `
+  <p class="snapshot">Snapshot: computed ${day(R.computed)}. ${fmt(st.length)} storm days, ${fmt(S.windy.days)} windy days and ${fmt(S.calm.days)} calm days from ${R.from.slice(0, 4)} to ${R.to.slice(0, 4)}.</p>
+
+  <h2>Short answer</h2>
+  <div class="answer">
+    <p>On most storm days, the wires. On the ${fmt(st.length)} windiest days, SSEN's network had ${N(S.storm.faults)} high-voltage faults a day on average, and ${N(med('storm'))} on a typical one, against ${fmt(med('calm'))} on a typical calm day. GB wind farms kept generating: ${N(S.storm.windMeanMW / 1000, 1)} GW on average, more than on ordinary windy days (${fmt(S.windy.windMeanMW / 1000, 1)} GW) and almost five times a calm day (${fmt(S.calm.windMeanMW / 1000, 1)} GW).</p>
+  </div>
+  <p>Wind farms' own unplanned outage notices barely moved. On storm days they covered about ${N(S.storm.remitMW)} MW of capacity, averaged over the day, against about ${fmt(S.calm.remitMW)} MW on calm days, and almost none of it was put down to the weather. Even the lowest half-hour of a storm day averaged ${N(S.storm.windMinMW / 1000, 1)} GW of wind output.</p>
+
+  <h2>Calm, windy and storm days</h2>
+  ${trio(R)}
+  <p class="small">Storm days are the ${fmt(st.length)} days with the highest average daily maximum gust across SSEN's 31 fault districts, at least two days apart. Windy days had one to three districts at 50 mph or more; calm days had none above 30 mph. Both are random samples.</p>
+
+  <h2>Storm by storm</h2>
+  <div class="scroll"><table><thead><tr><th>Date</th><th>Storm</th><th class="r">Average district gust</th><th class="r">SSEN faults</th><th class="r">GB wind output</th><th class="r">Lowest half-hour</th><th class="r">Wind in outage notices</th></tr></thead><tbody>
+    ${st.map(d => `<tr><td>${longDate(d.d)}</td><td>${STORM[d.d] || ''}</td><td class="r">${fmt(d.meanGust)} mph</td><td class="r">${fmt(d.faults)}</td><td class="r">${d.wind.mean == null ? '' : GW(d.wind.mean) + ' GW'}</td><td class="r">${d.wind.min == null ? '' : GW(d.wind.min) + ' GW'}</td><td class="r">${fmt(d.remit.mw)} MW</td></tr>`).join('')}
+  </tbody></table></div>
+  <p class="small">Storm names are my addition from public Met Office naming, matched by date. Gusts are ERA5 reanalysis, as in entry 02; wind output is Elexon's half-hourly generation by fuel type; outage notices are Elexon's REMIT data.</p>
+  <ul>
+    <li>${longDate(worst.d)}${STORM[worst.d] ? `, Storm ${STORM[worst.d]},` : ''} brought the most SSEN faults, ${N(worst.faults)}. GB wind farms generated ${N(worst.wind.mean / 1000, 1)} GW on average that day.</li>
+    <li>Some of the windiest days brought few faults: ${quiet.map(d => `${longDate(d.d)} (${fmt(d.faults)})`).join(', ')}. Where the strongest winds fell matters, and entries 02 and 09 found faults recorded against later dates, which could also explain some of these.</li>
+    <li>Wind output did dip on a few storm days: ${st.filter(d => d.wind.min != null && d.wind.min < 3000).map(d => `${longDate(d.d)}${STORM[d.d] ? ` (${STORM[d.d]})` : ''} fell to ${GW(d.wind.min)} GW`).join(', ')} for at least one half-hour. That could be the storm passing and the wind dropping, or turbines shutting down in the strongest gusts; half-hourly national totals cannot tell the two apart.</li>
+    <li>Across the storm days, the ones that hit SSEN's network hardest were only loosely the ones with the most wind capacity in outage notices (rank correlation ${N(R.rankCorr.faultsVsRemit, 2)}).</li>
+  </ul>
+
+  <h2>Checks</h2>
+  <ul>
+    <li>Could it just be more wind farms? GB wind capacity grew a lot over these nine years. But the storm days fall on average in ${meanYear('storm').toFixed(1)}, and the windy days in ${meanYear('windy').toFixed(1)}, less than a year apart, which is nowhere near enough growth to explain storm days generating ${fmt((S.storm.windMeanMW / S.windy.windMeanMW - 1) * 100)}% more. Calm days fall later still, in ${meanYear('calm').toFixed(1)}, so if anything the storm-to-calm gap is understated.</li>
+    <li>Did output drop compared with just before the storm? On the day before each storm day, GB wind averaged ${N(beforeMean / 1000, 1)} GW; on the storm day itself, ${N(S.storm.windMeanMW / 1000, 1)} GW.</li>
+    <li>Is the outage-notice figure the full picture? No. These notices are generally required only for larger units, so many onshore wind farms never file one, and averaging over a day hides a short trip at the height of a storm. That is why the output figures carry more weight here.</li>
+    <li>Output is measured after any instructions to turn down. On stormy days the system operator often pays Scottish wind farms to reduce output because of limits on the transmission network, so the wind farms could have generated more than this, not less.</li>
+  </ul>
+
+  <h2>Why the wind farms keep running</h2>
+  <p>Turbines are built to keep generating in strong wind and only shut down near the top of their range, and many newer designs ease back gradually instead of stopping at once. Wind farms are also spread across the country, so the core of a storm rarely covers them all. Overhead lines are exposed along their whole length, and one fallen tree can take out a feeder.</p>
+  <p>The two sides meet on the network itself. A wind farm that keeps running is no help to homes whose local line is down, and some smaller wind farms are connected to SSEN's lines and go off when those lines do. Those smaller wind farms are not in this national data.</p>
+
+  <h2>Method</h2>
+  <ol>
+    <li>Rank every day from ${R.from.slice(0, 4)} to ${R.to.slice(0, 4)} by the average daily maximum gust across SSEN's 31 fault districts (ERA5 reanalysis, one point per district, from entry 02). Take the top ${fmt(st.length)}, at least two days apart, plus random samples of windy and calm days.</li>
+    <li>Count SSEN's high-voltage faults each day, leaving out planned work.</li>
+    <li>From Elexon's REMIT data, take every unplanned outage notice for a wind farm whose event overlaps the day, keeping the latest revision published up to three days later. Add up the capacity each notice says is unavailable, weighted by how much of the day it covers.</li>
+    <li>From Elexon's generation by fuel type, take the average and the lowest half-hour of GB wind output that day.</li>
+  </ol>
+
+  <h2>What this cannot tell you</h2>
+  <ul>
+    <li>Elexon's wind output covers wind farms connected to the transmission network and some larger embedded ones. Smaller wind farms connected to SSEN's lines are missing, and they are the ones a local line fault would take off.</li>
+    <li>A turbine easing back in high wind is normal operation, not an outage, so it does not appear in REMIT. Output is the better measure of that, and output stayed high.</li>
+    <li>The storm days are picked by wind across SSEN's districts, which cover the north of Scotland and central southern England, while much of GB's wind capacity sits elsewhere, offshore in particular. A storm that hit those areas harder could look different.</li>
+    <li>"Wires" and "wind farms" overlap. When an SSEN line goes down, any small wind farm connected to it goes off too, and those losses are counted here as network faults.</li>
+    <li>ERA5 gusts are for 10 m above the ground at one point per district, which smooths out the strongest local gusts; turbines feel the wind at 100 m or more.</li>
+    <li>It cannot say whether SSEN's faults cut off any wind farms, or whether wind farms in the north were constrained off for other reasons, such as limits on the transmission network.</li>
+  </ul>
+
+  <h2>Data and reproduction</h2>
+  <p>Fault records: SSEN Distribution open data. Outage notices and wind output: <a href="https://bmrs.elexon.co.uk">Elexon</a> Insights Solution (REMIT and FUELHH datasets). Gusts: <a href="https://open-meteo.com">Open-Meteo</a> historical weather API (ERA5). The result file is <a href="data/10-storms.json">data/10-storms.json</a>; the script, <span class="n">10-run.html</span>, is in the <a href="https://github.com/nirdeshacharya/grid-labs/tree/main/analysis">analysis folder</a> and runs in a browser.</p>`;
+}
+getJSON('data/10-storms.json?v=1').then(render).catch(e => { $('#out').innerHTML = `<p class="err">The result file could not be loaded: ${esc(e.message)}.</p>`; });
+</script>
+</body>
+</html>
