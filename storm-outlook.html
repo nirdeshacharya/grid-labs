@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storm fault outlook · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .days5 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 14px 0 6px; }
+  .day { border: 1px solid var(--rule); border-radius: 3px; padding: 10px 10px 8px; background: var(--panel); }
+  .day h3 { font: 600 13px var(--sans); margin: 0; }
+  .day .x { font: 500 26px/1.15 var(--mono); letter-spacing: -.02em; margin: 6px 0 0; }
+  .day .x small { font-size: 12px; color: var(--ink-3); letter-spacing: 0; }
+  .day .r { font-size: 12px; color: var(--ink-3); }
+  .day .bar { height: 5px; border-radius: 2px; margin-top: 8px; background: var(--fill); overflow: hidden; }
+  .day .bar i { display: block; height: 100%; }
+  @media (max-width: 620px) { .days5 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .day .x { font-size: 22px; } }
+  .grid { display: grid; grid-template-columns: minmax(118px, 180px) repeat(5, minmax(0, 1fr)); gap: 2px; font-size: 12.5px; margin: 8px 0; }
+  .grid .h { font: 11px var(--mono); color: var(--ink-3); text-align: center; padding-bottom: 2px; }
+  .grid .n { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 3px 4px 3px 0; }
+  .grid .c { text-align: center; font: 12px var(--mono); padding: 4px 0; border-radius: 2px; }
+  .grid .sep { grid-column: 1 / -1; font: 600 11px var(--cond); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); margin: 10px 0 2px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--ink-2); margin: 6px 0 0; }
+  .legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a></nav></div></header>
+<main>
+  <div class="entry">Visual · from entry 09 <span class="small">· posted 22 November 2026</span></div>
+  <h1>Storm fault outlook</h1>
+  <p class="lede">The next five days of forecast wind for SSEN's 31 fault districts, and whether days like that have brought more high-voltage faults than normal.</p>
+  <div id="out"><p class="loading">Loading the forecast…</p></div>
+  <footer>Part of <a href="./">Grid Labs</a>. A personal project, built in my own time from public open data. Not an SSEN product and not SSEN's view. This is a statistical estimate from published records and a public weather forecast; it is not a warning and not advice.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+const DISTRICT = { 'N/EAST': 'North East Scotland', HIGH: 'Highland', TAYCEN: 'Tayside and Central', ARGYLL: 'Argyll and West Highland', SHET: 'Shetland', WISLES: 'Western Isles', ORKN: 'Orkney',
+  POOL: 'Poole', MELK: 'Melksham', OXFN: 'Oxford North', SWIN: 'Swindon', OXFS: 'Oxford South', NEWF: 'New Forest', PETE: 'Petersfield', BASI: 'Basingstoke', REAN: 'Reading North', ALDE: 'Aldershot',
+  REAS: 'Reading South', CHIC: 'Chichester', SALI: 'Salisbury', SLOU: 'Slough', YEOV: 'Yeovil', NEWB: 'Newbury', BOUR: 'Bournemouth', BRAC: 'Bracknell', ANDO: 'Andover', PORT: 'Portsmouth',
+  ISLE: 'Isle of Wight', SOTN: 'Southampton', WLON: 'West London', EGHA: 'Egham' };
+// warning levels, set by the predicted total for the whole network against the median day: the rule the backtest scored
+const LEVELS = [
+  { key: 'normal', lo: 0, hi: 1.5, label: 'Normal', colour: 'var(--fill)' },
+  { key: 'busy', lo: 1.5, hi: 3, label: 'Busier than normal likely', colour: 'color-mix(in srgb, var(--warn) 70%, var(--fill))' },
+  { key: 'storm', lo: 3, hi: Infinity, label: 'Storm day likely', colour: 'var(--crit)' },
+];
+// how unusual a gust is for its district, by the district's own gust percentiles
+const UNUSUAL = [['Ordinary for here', 'var(--fill)'], ['Breezy', 'var(--fill)'], ['Windy for here', 'color-mix(in srgb, var(--warn) 30%, var(--fill))'], ['Very windy for here', 'color-mix(in srgb, var(--warn) 60%, var(--fill))'],
+  ['Top 5% of days', 'color-mix(in srgb, var(--crit) 45%, var(--fill))'], ['Top 2%', 'color-mix(in srgb, var(--crit) 75%, var(--fill))'], ['Top 0.5%', 'var(--crit)']];
+const winter = d => { const m = +d.slice(5, 7); return m >= 10 || m <= 3; };
+const dayName = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+const bandOf = (dist, g) => { const i = dist.gustAt.findIndex(c => g < c); return i < 0 ? dist.gustAt.length : i; };
+
+async function render() {
+  const M = await getJSON('data/09-outlook.json?v=2');
+  const D = M.live.districts, T = M.tests[M.chosen], med = T.medianFaults;
+  const fc = await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${D.map(d => d.lat).join(',')}&longitude=${D.map(d => d.lon).join(',')}&daily=wind_gusts_10m_max&wind_speed_unit=mph&timezone=Europe%2FLondon&forecast_days=5`);
+  const list = Array.isArray(fc) ? fc : [fc], days = list[0].daily.time;
+  const rows = D.map((d, i) => { const g = list[i].daily.wind_gusts_10m_max; return { ...d, name: DISTRICT[d.d] || d.d,
+    cells: days.map((day, j) => { const b = g[j] == null ? 0 : bandOf(d, g[j]); return { g: g[j], b, exp: d.base[winter(day) ? 'winter' : 'summer'] * M.live.mult[d.area][b].m }; }) }; });
+  // the track record of each level on 2023-2025, from the backtest's daily series
+  const S = T.series.map(([d, a, p]) => ({ d, a, x: p / med }));
+  const record = LEVELS.map(L => { const ds = S.filter(s => s.x >= L.lo && s.x < L.hi); return { ...L, days: ds.length, avg: ds.reduce((t, s) => t + s.a, 0) / Math.max(1, ds.length),
+    busier: ds.filter(s => s.a >= 1.2 * med).length / Math.max(1, ds.length), bad: ds.filter(s => s.a >= 2 * med).length / Math.max(1, ds.length) }; });
+  const GRADED = 2;   // today and tomorrow: the test used forecasts made close to the day, so only those are graded
+  const outlook = days.map((day, j) => { const p = rows.reduce((t, r) => t + r.cells[j].exp, 0), x = p / med, L = j < GRADED ? record.find(l => x >= l.lo && x < l.hi) : { key: 'ungraded', label: 'Too far ahead to grade', colour: 'var(--rule)' };
+    return { day, x, L, drivers: rows.filter(r => r.cells[j].b >= 4).sort((a, b) => b.cells[j].b - a.cells[j].b).slice(0, 3) }; });
+  const missed = T.badDays - T.hits, issued = new Date().toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+
+  $('#out').innerHTML = `
+  <p class="snapshot">Forecast fetched ${issued} from Open-Meteo.</p>
+
+  <div class="answer"><p>This is a rough guide, not a forecast. Tested on 2023 to 2025, ${fmt(record[2].bad * 100)}% of the days it called storm days brought at least twice the faults of a normal day, and ${fmt(record[1].bad * 100)}% of the days it called busier, against ${fmt(record[0].bad * 100)}% of the days it called normal. But it missed ${fmt(missed)} of the ${fmt(T.badDays)} worst days, and on the biggest storms it expected two or three times too few faults. <a href="09-forecasting-faults.html">How it was tested</a>.</p></div>
+
+  <h2>Next five days, across SSEN</h2>
+  <p class="small" style="margin-top:-4px">Only today and tomorrow get a level. The model was tested on forecasts made close to the day; further ahead, forecasts of where a storm will hit are much less certain. The later days still show which districts look unusually windy.</p>
+  <div class="days5">${outlook.map(o => `<div class="day" style="${o.L.key === 'busy' || o.L.key === 'storm' ? `border-color:${o.L.colour}` : ''}${o.L.key === 'ungraded' ? 'opacity:.75' : ''}"><h3>${dayName(o.day)}</h3>
+    <p class="x" style="font-size:16px;font-family:var(--sans);font-weight:600;line-height:1.25">${o.L.label}</p>
+    <div class="bar"><i style="width:${o.L.key === 'busy' ? 50 : o.L.key === 'storm' ? 100 : 0}%;background:${o.L.colour}"></i></div>
+    <p class="r" style="margin-top:6px">${o.drivers.length ? `Among its windiest 5% of days: ${o.drivers.map(r => esc(r.name)).join(', ')}` : 'No district among its windiest 5% of days'}</p></div>`).join('')}</div>
+
+  <h2>What each level has meant</h2>
+  <div class="scroll"><table><thead><tr><th>Level</th><th class="r">Days, 2023 to 2025</th><th class="r">Average faults that day</th><th class="r">Busier than normal</th><th class="r">At least twice a normal day</th></tr></thead><tbody>
+    ${record.map(l => `<tr><td><i class="sq" style="background:${l.colour};border:1px solid var(--rule)"></i>${l.label}</td><td class="r">${fmt(l.days)}</td><td class="r">${fmt(l.avg)}</td><td class="r">${fmt(l.busier * 100)}%</td><td class="r">${fmt(l.bad * 100)}%</td></tr>`).join('')}
+  </tbody></table></div>
+  <p class="small">High-voltage faults across both licence areas. A normal day has about ${fmt(med)}. "Busier than normal" means at least 1.2 times that, a bar ordinary variation clears quite often, which is why the normal row matters; "at least twice" is the stricter test. The levels come from the forecast gusts alone, using a model fitted before the test years.</p>
+
+  <h2>Forecast gusts, district by district</h2>
+  <div class="legend">${UNUSUAL.slice(2).map(([l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')}</div>
+  <div class="grid">
+    <div></div>${days.map(d => `<div class="h">${dayName(d)}</div>`).join('')}
+    ${['SHEPD', 'SEPD'].map(area => `<div class="sep">${area === 'SHEPD' ? 'North of Scotland' : 'Southern England'}</div>` + rows.filter(r => r.area === area).sort((a, b) => Math.max(...b.cells.map(c => c.b)) - Math.max(...a.cells.map(c => c.b)) || a.name.localeCompare(b.name)).map(r => `<div class="n" title="${esc(r.name)}">${esc(r.name)}</div>${r.cells.map((c, j) => `<div class="c" style="background:${UNUSUAL[c.b][1]}" data-tip="${esc(r.name)}, ${dayName(days[j])}\nForecast gust ${c.g == null ? 'n/a' : fmt(c.g) + ' mph'}\n${UNUSUAL[c.b][0]}">${c.g == null ? '' : fmt(c.g)}</div>`).join('')}`).join('')).join('')}
+  </div>
+  <p class="small">Forecast maximum gust in mph at each district's central point. The colour is how unusual that gust is for the district, judged against its own last nine years, so 50 mph counts for less in Shetland than in Reading. This grid is weather only; the model was not tested district by district.</p>
+
+  <h2>What this is and is not</h2>
+  <ul>
+    <li>It is a statistical guide: what days with similar forecast gusts have brought in SSEN's own fault records. It knows nothing about rain, snow, lightning, saturated ground, trees in leaf, or work SSEN has done since.</li>
+    <li>It was tested on archived forecasts close to the day itself. Forecasts further ahead are less reliable, and so are the later days here.</li>
+    <li>It counts faults, not customers affected or how long repairs take.</li>
+    <li>It is not SSEN's view and not a storm warning. For those, see the Met Office and SSEN's power cut updates.</li>
+  </ul>`;
+}
+render().catch(e => { $('#out').innerHTML = `<p class="err">The outlook could not be loaded: ${esc(e.message)}.</p>`; });
+</script>
+</body>
+</html>

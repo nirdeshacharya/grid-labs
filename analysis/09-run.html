@@ -1,0 +1,124 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Entry 09 analysis run</title>
+<!-- Builds and backtests the storm fault outlook in entry 09. Steps:
+     1. python3 analysis/fetch_forecast_gusts.py   (writes analysis/cache/forecast-gusts.json)
+     2. python3 -m http.server 5179                 (from the repository root)
+     3. open http://localhost:5179/analysis/09-run.html and save the JSON into data/09-outlook.json
+     The model: expected high-voltage faults in a district on a day = that district's normal rate for the season
+     on calm days x a multiplier for the day's forecast gust. It is fitted on 2017-2022 and tested on 2023-2025,
+     using archived forecast gusts throughout, then refitted on all nine years for the live page. -->
+<body style="font:13px ui-monospace,Menlo,monospace;white-space:pre-wrap;padding:16px">running…
+<script src="../lab.js"></script>
+<script>
+const HV = { SHEPD: '245d5825-7d83-4d17-a2c5-04b473b9b408', SEPD: 'f0d9d3fe-6739-4700-a699-f227b4e1de41' };
+const PLANNED = new Set(['75', '86']), CALM = 30;
+const TRAIN = ['2017-01-01', '2022-12-31'], TEST = ['2023-01-01', '2025-12-31'];
+const FIT_EARLY = ['2017-01-01', '2020-12-31'], VALIDATE = ['2021-01-01', '2022-12-31'];   // used only to choose between model versions
+const BANDS = [0, 20, 30, 40, 50, 60, 70, Infinity];                 // mph, as in entry 02
+const PBANDS = [0, 0.5, 0.8, 0.9, 0.95, 0.98, 0.995, 1.01];          // the district's own gust percentile
+const r2 = x => Math.round(x * 100) / 100, r3 = x => Math.round(x * 1000) / 1000;
+const winter = d => { const m = +d.slice(5, 7); return m >= 10 || m <= 3; };
+const bandOf = (v, B) => { for (let i = 0; i < B.length - 1; i++) if (v < B[i + 1]) return i; return B.length - 2; };
+const q = (a, p) => { const s = Float64Array.from(a).sort(); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
+
+async function run() {
+  const [G, n, s, districts, E] = await Promise.all([getJSON('cache/forecast-gusts.json'),
+    fetchAll(HV.SHEPD, ['DISTRICT_SHORT_CODE', 'HV_INCIDENT_TIME', 'CAUSE_CODE', 'CAUSE']), fetchAll(HV.SEPD, ['DISTRICT_SHORT_CODE', 'HV_INCIDENT_TIME', 'CAUSE_CODE', 'CAUSE']),
+    getJSON('districts.json'), getJSON('cache/wind.json')]);
+  const days = G.days, ix = new Map(days.map((d, i) => [d, i])), keys = districts.map(d => d.area + '/' + d.d);
+  const F = Object.fromEntries(keys.map(k => [k, new Uint16Array(days.length)])), windy = new Uint16Array(days.length);
+  for (const [area, rows] of [['SHEPD', n], ['SEPD', s]]) for (const r of rows) {
+    if (PLANNED.has(String(r.CAUSE_CODE))) continue;
+    const i = ix.get(String(r.HV_INCIDENT_TIME).slice(0, 10)), f = F[area + '/' + r.DISTRICT_SHORT_CODE];
+    if (i != null && f) { f[i]++; if (/wind|gale|tree/i.test(r.CAUSE || '')) windy[i]++; }
+  }
+  // records out of step with the weather: a day whose faults are mostly put down to wind or trees, although no district
+  // had a gust of 40 mph in either the forecast archive or ERA5 reanalysis. No forecast can predict these.
+  const eix = new Map(E.days.map((d, i) => [d, i]));
+  const total = i => keys.reduce((a, k) => a + F[k][i], 0);
+  const maxGust = i => Math.max(...keys.map(k => Math.max(G.gust[k][i] ?? 0, E.gust[k]?.[eix.get(days[i])] ?? 0)));
+  const mismatch = new Set(days.map((d, i) => i).filter(i => total(i) >= 40 && windy[i] / total(i) >= 0.5 && maxGust(i) < 40));
+  const inRange = (d, [a, b]) => d >= a && d <= b;
+  // each district's own gust percentiles, from the training years
+  const pct = {}; for (const k of keys) { const v = days.map((d, i) => inRange(d, TRAIN) ? G.gust[k][i] : null).filter(x => x != null).sort((a, b) => a - b); pct[k] = g => { let lo = 0, hi = v.length; while (lo < hi) { const m = (lo + hi) >> 1; v[m] <= g ? lo = m + 1 : hi = m; } return lo / v.length; }; }
+
+  function fit(range, kind) {
+    const base = {}, mult = { SEPD: [], SHEPD: [] }, B = kind === 'mph' ? BANDS : PBANDS;
+    for (const k of keys) {
+      const acc = { w: [0, 0], s: [0, 0] };
+      days.forEach((d, i) => { const g = G.gust[k][i]; if (!inRange(d, range) || g == null || g >= CALM) return; const a = acc[winter(d) ? 'w' : 's']; a[0] += F[k][i]; a[1]++; });
+      base[k] = { w: acc.w[0] / Math.max(1, acc.w[1]), s: acc.s[0] / Math.max(1, acc.s[1]) };
+    }
+    for (const area of ['SEPD', 'SHEPD']) {
+      const obs = new Array(B.length - 1).fill(0), exp = new Array(B.length - 1).fill(0), nd = new Array(B.length - 1).fill(0);
+      for (const k of keys.filter(k => k.startsWith(area))) days.forEach((d, i) => {
+        const g = G.gust[k][i]; if (!inRange(d, range) || g == null) return;
+        const b = bandOf(kind === 'mph' ? g : pct[k](g), B); obs[b] += F[k][i]; exp[b] += base[k][winter(d) ? 'w' : 's']; nd[b]++;
+      });
+      mult[area] = obs.map((o, b) => ({ lo: B[b], hi: Number.isFinite(B[b + 1]) ? B[b + 1] : null, m: exp[b] ? r3(o / exp[b]) : 1, districtDays: nd[b], faults: o }));
+    }
+    return { kind, base, mult, B };
+  }
+  // exponential version: above 30 mph, faults rise by a fixed factor per mph, with no ceiling
+  function fitExp(range) {
+    const M = fit(range, 'mph'); M.kind = 'exp'; M.beta = {};
+    for (const area of ['SEPD', 'SHEPD']) {
+      const pts = []; for (const k of keys.filter(k => k.startsWith(area))) days.forEach((d, i) => { const g = G.gust[k][i]; if (inRange(d, range) && g != null && g >= CALM) pts.push([g - CALM, F[k][i], M.base[k][winter(d) ? 'w' : 's']]); });
+      let best = 0, bestDev = Infinity;
+      for (let b = 0.01; b <= 0.2; b += 0.0025) { let dev = 0; for (const [x, y, base] of pts) { const mu = base * Math.exp(b * x); dev += mu - (y ? y * Math.log(mu) : 0); } if (dev < bestDev) { bestDev = dev; best = b; } }
+      M.beta[area] = r3(best);
+    }
+    return M;
+  }
+  const predict = (M, k, d, g) => { const b = M.base[k][winter(d) ? 'w' : 's']; if (g == null) return b;
+    if (M.kind === 'exp') return g < CALM ? b : b * Math.exp(M.beta[k.split('/')[0]] * (g - CALM));
+    const band = bandOf(M.kind === 'mph' ? g : pct[k](g), M.B); return b * M.mult[k.split('/')[0]][band].m; };
+  // Poisson deviance of district-day predictions over a period: a fair score for counts, and it punishes missing a storm
+  const deviance = (M, range) => { let dev = 0; for (const k of keys) days.forEach((d, i) => { if (!inRange(d, range) || mismatch.has(i)) return; const mu = Math.max(1e-6, predict(M, k, d, G.gust[k][i])), y = F[k][i]; dev += 2 * ((y ? y * Math.log(y / mu) : 0) - (y - mu)); }); return dev; };
+  const naive = (M, k, d) => M.base[k][winter(d) ? 'w' : 's'];
+
+  function test(M, clean) {
+    const tdays = days.map((d, i) => [d, i]).filter(([d, i]) => inRange(d, TEST) && !(clean && mismatch.has(i)));
+    const rows = tdays.map(([d, i]) => {
+      let p = 0, a = 0, nv = 0; for (const k of keys) { p += predict(M, k, d, G.gust[k][i]); a += F[k][i]; nv += naive(M, k, d); }
+      const maxG = Math.max(...keys.map(k => G.gust[k][i] ?? 0));
+      return { d, p, a, nv, maxG };
+    });
+    const mae = rows.reduce((s, r) => s + Math.abs(r.p - r.a), 0) / rows.length, maeN = rows.reduce((s, r) => s + Math.abs(r.nv - r.a), 0) / rows.length;
+    const mean = f => rows.reduce((s, r) => s + f(r), 0) / rows.length;
+    const mp = mean(r => r.p), ma = mean(r => r.a), cov = mean(r => (r.p - mp) * (r.a - ma)), sp = Math.sqrt(mean(r => (r.p - mp) ** 2)), sa = Math.sqrt(mean(r => (r.a - ma) ** 2));
+    const med = q(rows.map(r => r.a), 0.5);
+    const bad = rows.filter(r => r.a >= 2 * med), flagged = rows.filter(r => r.p >= 1.5 * med);
+    const hits = bad.filter(r => r.p >= 1.5 * med).length, falseAlarms = flagged.filter(r => r.a < 1.2 * med).length;
+    // calibration: actual / predicted, by predicted level, for intervals on the live page
+    const levels = [0, 1.2, 1.5, 2, 3, Infinity];
+    const calib = levels.slice(0, -1).map((lo, j) => { const rs = rows.filter(r => r.p / med >= lo && r.p / med < levels[j + 1]); const ratio = rs.map(r => r.a / r.p);
+      return { lo, hi: Number.isFinite(levels[j + 1]) ? levels[j + 1] : null, days: rs.length, meanActual: r2(rs.reduce((s, r) => s + r.a, 0) / Math.max(1, rs.length)), meanPredicted: r2(rs.reduce((s, r) => s + r.p, 0) / Math.max(1, rs.length)), p10: rs.length ? r2(q(ratio, 0.1)) : null, p90: rs.length ? r2(q(ratio, 0.9)) : null }; });
+    const worst = [...rows].sort((a, b) => b.a - a.a).slice(0, 12).map(r => ({ d: r.d, actual: r.a, predicted: Math.round(r.p), normal: Math.round(r.nv), maxGust: Math.round(r.maxG) }));
+    return { days: rows.length, medianFaults: med, mae: r2(mae), maeNoWind: r2(maeN), skill: r3(1 - mae / maeN), r: r3(cov / (sp * sa)),
+      badDays: bad.length, hits, hitRate: r3(hits / Math.max(1, bad.length)), flagged: flagged.length, falseAlarms, falseAlarmRate: r3(falseAlarms / Math.max(1, flagged.length)), calib, worst,
+      series: rows.map(r => [r.d, r.a, Math.round(r.p * 10) / 10]) };
+  }
+  // choose the version on 2021-2022 only, fitting on 2017-2020, so the test years play no part in the choice
+  const early = { mph: fit(FIT_EARLY, 'mph'), pct: fit(FIT_EARLY, 'pct'), exp: fitExp(FIT_EARLY) };
+  const validation = Object.fromEntries(Object.entries(early).map(([k, M]) => [k, Math.round(deviance(M, VALIDATE))]));
+  const chosen = Object.entries(validation).sort((a, b) => a[1] - b[1])[0][0];
+  const models = { mph: fit(TRAIN, 'mph'), pct: fit(TRAIN, 'pct'), exp: fitExp(TRAIN) };
+  const tests = Object.fromEntries(Object.entries(models).map(([k, M]) => [k, test(M, false)]));
+  const clean = Object.fromEntries(Object.entries(models).map(([k, M]) => [k, (({ series, worst, calib, ...rest }) => rest)(test(M, true))]));
+  // refit the chosen version on all nine years for the live page
+  const ALL = [TRAIN[0], TEST[1]], live = chosen === 'exp' ? fitExp(ALL) : fit(ALL, chosen);
+  const pctTable = chosen === 'pct' ? Object.fromEntries(keys.map(k => { const v = days.map((d, i) => G.gust[k][i]).filter(x => x != null).sort((a, b) => a - b); return [k, PBANDS.slice(1, -1).map(p => Math.round(v[Math.floor(p * (v.length - 1))] * 10) / 10)]; })) : null;
+  return {
+    computed: new Date().toISOString(), train: TRAIN, test: TEST, fitEarly: FIT_EARLY, validate: VALIDATE, calmBelow: CALM, chosen, validation,
+    mismatchDays: [...mismatch].map(i => ({ d: days[i], faults: total(i), windShare: r2(windy[i] / total(i)), maxGust: Math.round(maxGust(i)) })),
+    tests: Object.fromEntries(Object.entries(tests).map(([k, t]) => [k, { ...t, series: k === chosen ? t.series : undefined }])), clean,
+    live: { kind: chosen, beta: live.beta || null, calmBelow: CALM, bands: chosen === 'pct' ? PBANDS.slice(0, -1) : BANDS.slice(0, -1), mult: live.mult,
+      districts: districts.map(d => ({ key: d.area + '/' + d.d, area: d.area, d: d.d, lat: d.lat, lon: d.lon, base: { winter: r3(live.base[d.area + '/' + d.d].w), summer: r3(live.base[d.area + '/' + d.d].s) }, gustAt: pctTable?.[d.area + '/' + d.d] })) },
+    calib: tests[chosen].calib
+  };
+}
+run().then(r => { window._result = r; const s = JSON.stringify(r); document.body.textContent = `done, ${(s.length / 1024).toFixed(0)} KB`; })
+  .catch(e => { window._error = String(e); document.body.textContent = 'failed: ' + e; });
+</script>

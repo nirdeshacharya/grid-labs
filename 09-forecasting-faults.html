@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forecasting faults · Grid Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart text { font: 10.5px var(--mono); fill: var(--ink-3); }
+  .chart .grid { stroke: var(--rule); }
+  .chart .act { fill: none; stroke: var(--ink-3); stroke-width: 1; }
+  .chart .pred { fill: none; stroke: var(--s2); stroke-width: 1.6; }
+</style>
+</head>
+<body>
+<header class="top"><div><a class="home" href="./">Grid Labs</a><nav><a href="./">All entries</a></nav></div></header>
+<main>
+  <div class="entry">Entry 09 <span class="status finding">Finding</span> <span class="small">· posted 22 November 2026</span></div>
+  <h1>Can a wind forecast tell you how many faults are coming?</h1>
+  <p class="lede">A simple model built from six years of SSEN fault records and the gusts weather models forecast, tested on the three years it never saw.</p>
+  <p>Entry 02 showed how fault rates climb with wind. This entry asks whether that is enough to look ahead: given tomorrow's forecast gusts, how many high-voltage faults should SSEN's network expect? The answer decides whether the <a href="storm-outlook.html">storm fault outlook</a> is worth publishing.</p>
+  <div id="out"><p class="loading">Loading the data…</p></div>
+  <footer>Part of <a href="./">Grid Labs</a>. A personal project, built in my own time from public open data. Not an SSEN product and not SSEN's view. This tests a statistical model on past records; it is not an operational forecast.</footer>
+</main>
+<script src="lab.js"></script>
+<script>
+const N = (v, d = 0) => `<b class="n">${fmt(v, d)}</b>`;
+const pct = v => `<b class="n">${fmt(v * 100)}%</b>`;
+const longDate = s => new Date(s + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+// Named storms, from public Met Office naming, as in entry 02
+const STORM = { '2023-02-17': 'Otto', '2023-10-19': 'Babet', '2023-10-20': 'Babet', '2023-11-02': 'Ciarán', '2023-12-07': 'Elin', '2023-12-21': 'Pia', '2023-12-27': 'Gerrit', '2024-01-02': 'Henk', '2024-01-21': 'Isha', '2024-01-23': 'Jocelyn', '2024-10-13': 'Ashley', '2024-11-23': 'Bert', '2024-12-07': 'Darragh', '2025-01-24': 'Éowyn' };
+
+function series(T) {
+  const S = T.series, W = 700, H = 220, L = 34, R = 8, Tp = 8, B = 22, ymax = Math.ceil(Math.max(...S.map(s => Math.max(s[1], s[2]))) / 50) * 50;
+  const x = i => L + i / (S.length - 1) * (W - L - R), y = v => H - B - v / ymax * (H - Tp - B);
+  const path = k => S.map((s, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(s[k]).toFixed(1)}`).join('');
+  const years = [...new Set(S.map(s => s[0].slice(0, 4)))];
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily high-voltage faults, actual and predicted">
+    ${[0, ymax / 2, ymax].map(v => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 5}" y="${y(v) + 3.5}" text-anchor="end">${v}</text>`).join('')}
+    ${years.map(yr => { const i = S.findIndex(s => s[0].startsWith(yr)); return `<text x="${x(i)}" y="${H - 6}">${yr}</text>`; }).join('')}
+    <path class="act" d="${path(1)}"/><path class="pred" d="${path(2)}"/></svg>`;
+}
+
+const VERSIONS = [['pct', 'Gust compared with what is usual for the district'], ['mph', 'Gust in mph'], ['exp', 'Exponential rise above 30 mph']];
+function render(R) {
+  const T = R.tests[R.chosen];
+  const col = f => VERSIONS.map(([k]) => `<td class="r"${k === R.chosen ? ' style="font-weight:600"' : ''}>${f(R.tests[k], R.clean[k], k)}</td>`).join('');
+  const w = T.worst;
+  $('#out').innerHTML = `
+  <p class="snapshot">Snapshot: computed ${day(R.computed)}. Fitted on ${longDate(R.train[0])} to ${longDate(R.train[1])}, tested on ${longDate(R.test[0])} to ${longDate(R.test[1])}.</p>
+
+  <h2>Short answer</h2>
+  <div class="answer" id="answer"></div>
+
+  <h2>Three years it never saw</h2>
+  <div class="key"><span><i class="sq" style="background:var(--ink-3);height:2px;vertical-align:middle"></i>Actual faults a day</span><span><i class="sq" style="background:var(--s2);height:3px;vertical-align:middle"></i>Predicted from the forecast gust</span></div>
+  <figure class="chart">${series(T)}
+    <figcaption>High-voltage faults per day across both licence areas, ${R.test[0].slice(0, 4)} to ${R.test[1].slice(0, 4)}, against what the model predicted from each day's forecast gusts. Planned work is left out.</figcaption></figure>
+
+  <h2>How it scores</h2>
+  <div class="scroll"><table><thead><tr><th>Measure, ${R.test[0].slice(0, 4)} to ${R.test[1].slice(0, 4)}</th>${VERSIONS.map(([k, l]) => `<th class="r">${l}${k === R.chosen ? ' (used)' : ''}</th>`).join('')}</tr></thead><tbody>
+    <tr><td>Score on ${R.validate[0].slice(0, 4)} to ${R.validate[1].slice(0, 4)}, used to choose (lower is better)</td>${col((t, c, k) => fmt(R.validation[k]))}</tr>
+    <tr><td>Correlation of predicted and actual daily totals</td>${col(t => fmt(t.r, 2))}</tr>
+    <tr><td>Average miss, faults a day (no wind information: ${fmt(T.maeNoWind, 1)})</td>${col(t => fmt(t.mae, 1))}</tr>
+    <tr><td>Share of that miss removed</td>${col(t => fmt(t.skill * 100) + '%')}</tr>
+    <tr><td>Bad days caught (at least twice the median day)</td>${col(t => `${fmt(t.hits)} of ${fmt(t.badDays)}`)}</tr>
+    <tr><td>False alarms (warned, but under 1.2 times the median)</td>${col(t => `${fmt(t.falseAlarms)} of ${fmt(t.flagged)}`)}</tr>
+    <tr><td>Bad days caught, leaving out days whose records do not match the weather</td>${col((t, c) => `${fmt(c.hits)} of ${fmt(c.badDays)}`)}</tr>
+  </tbody></table></div>
+  <p class="small">A day is "warned" when the model predicts at least 1.5 times the median day of ${fmt(T.medianFaults)} faults. The version was chosen by fitting each on ${R.fitEarly[0].slice(0, 4)} to ${R.fitEarly[1].slice(0, 4)} and scoring it on ${R.validate[0].slice(0, 4)} to ${R.validate[1].slice(0, 4)} with Poisson deviance, so the test years played no part in the choice.</p>
+
+  <h2>Days the records and the weather disagree</h2>
+  <p>On ${N(R.mismatchDays.length)} days in the record, most faults were put down to wind or trees, yet no district had a gust of 40 mph in either the forecast archive or the ERA5 reanalysis used in entry 02. The largest:</p>
+  <div class="scroll"><table><thead><tr><th>Date</th><th class="r">Faults</th><th class="r">Put down to wind or trees</th><th class="r">Highest gust, any district</th></tr></thead><tbody>
+    ${[...R.mismatchDays].sort((a, b) => b.faults - a.faults).slice(0, 6).map(m => `<tr><td>${longDate(m.d)}</td><td class="r">${fmt(m.faults)}</td><td class="r">${fmt(m.windShare * 100)}%</td><td class="r">${fmt(m.maxGust)} mph</td></tr>`).join('')}
+  </tbody></table></div>
+  <p>No wind forecast could predict these. They look like faults recorded against the wrong date, the same problem entry 02 found, though the data cannot prove it. Leaving them out changes the scores little, as the last row of the table shows.</p>
+
+  <h2>The worst days</h2>
+  <div class="scroll"><table><thead><tr><th>Date</th><th>Named storm</th><th class="r">Actual</th><th class="r">Predicted</th><th class="r">Normal</th><th class="r">Highest district gust</th></tr></thead><tbody>
+    ${w.map(d => `<tr><td>${longDate(d.d)}</td><td>${STORM[d.d] || ''}</td><td class="r">${fmt(d.actual)}</td><td class="r">${fmt(d.predicted)}</td><td class="r">${fmt(d.normal)}</td><td class="r">${fmt(d.maxGust)} mph</td></tr>`).join('')}
+  </tbody></table></div>
+  <p class="small">Storm names are my addition from public Met Office naming, matched by date.</p>
+
+  <h2>How sure it is</h2>
+  <div class="scroll"><table><thead><tr><th>Predicted, as a multiple of the median day</th><th class="r">Days</th><th class="r">Average predicted</th><th class="r">Average actual</th><th class="r">Eight in ten fell between</th></tr></thead><tbody>
+    ${R.calib.map(c => `<tr><td>${c.hi == null ? `${c.lo} or more` : `${c.lo} to ${c.hi}`}</td><td class="r">${fmt(c.days)}</td><td class="r">${fmt(c.meanPredicted)}</td><td class="r">${fmt(c.meanActual)}</td><td class="r">${c.p10 == null ? '' : `${fmt(c.p10, 2)}× and ${fmt(c.p90, 2)}× the prediction`}</td></tr>`).join('')}
+  </tbody></table></div>
+  <p class="small">The spread is wide even when the average is close: a day predicted at three times the median can bring a normal day or many times more. That is why the outlook gives levels rather than numbers.</p>
+
+  <h2>Method</h2>
+  <ol>
+    <li>Count high-voltage faults per district per day from SSEN's fault records, leaving out planned work, as in entry 02.</li>
+    <li>Take the daily maximum gust that weather models forecast for each district's central point, from Open-Meteo's archive of past forecasts. Using archived forecasts rather than reanalysis means the test uses the same kind of numbers the live outlook will.</li>
+    <li>For each district, work out its normal rate on calm days (gusts under ${R.calmBelow} mph), separately for October to March and April to September.</li>
+    <li>For each licence area, work out how much more often faults happen at each level of gust, as a multiple of the calm rate. Three versions: by gust in mph, by the gust's percentile for that district, and an exponential rise above ${R.calmBelow} mph with no upper limit.</li>
+    <li>Choose between them on ${R.validate[0].slice(0, 4)} to ${R.validate[1].slice(0, 4)}, fitting on the years before. Then fit all three on ${R.train[0].slice(0, 4)} to ${R.train[1].slice(0, 4)}, predict every day of ${R.test[0].slice(0, 4)} to ${R.test[1].slice(0, 4)}, and score. The outlook uses the chosen version, refitted on all nine years.</li>
+  </ol>
+
+  <h2>What this cannot tell you</h2>
+  <ul>
+    <li>Archived forecasts are the first hours of each day's model runs, so the test is closest to a forecast made the same day. Forecasts several days ahead are less accurate, which is why the outlook only grades today and tomorrow.</li>
+    <li>The weather models behind the archive were upgraded several times between 2017 and 2025, so a given forecast gust may not mean quite the same thing across the record.</li>
+    <li>2023 to 2025 was a stormy run of years. A quieter test period might score differently.</li>
+    <li>If faults from storm days were sometimes recorded against later dates, as the mismatched days suggest, the storm peaks the model learned from are too low, which would add to its underestimate of big storms.</li>
+    <li>Each district's calm-day rate includes faults on underground cable, which wind does not touch. Multiplying it by a wind factor treats a mostly underground district like a mostly overhead one.</li>
+    <li>Storm days are few, and faults on them come in clusters rather than one at a time, so the scores for the highest levels rest on a small number of days.</li>
+    <li>Wind is not the only cause. Lightning, snow, heavy rain and saturated ground bring faults on days the gust forecast misses.</li>
+    <li>The network changes. Lines rebuilt or put underground since ${R.train[0].slice(0, 4)} fault less, and the model does not know.</li>
+    <li>It predicts faults, not how many customers lose supply or for how long.</li>
+  </ul>
+
+  <h2>Data and reproduction</h2>
+  <p>Fault records: SSEN Distribution open data. Forecast gusts: <a href="https://open-meteo.com">Open-Meteo</a> historical forecast API, and its forecast API for the live outlook. The result file is <a href="data/09-outlook.json">data/09-outlook.json</a>; the scripts, <span class="n">fetch_forecast_gusts.py</span> and <span class="n">09-run.html</span>, are in the <a href="https://github.com/nirdeshacharya/grid-labs/tree/main/analysis">analysis folder</a>.</p>`;
+  $('#answer').innerHTML = answer(R, T);
+}
+// the short answer depends on the result, so it is written from it
+function answer(R, T) {
+  const w = T.worst.filter(d => d.maxGust >= 70).slice(0, 3);
+  return `<p>Not well enough to count faults, but well enough to flag storm days. On the three test years the forecast gust removed only ${pct(T.skill)} of the error of assuming every day is normal, because ordinary days vary too much for wind to explain. It caught ${N(T.hits)} of the ${N(T.badDays)} days when faults reached at least twice a typical day, and on the biggest storms it expected far too few: ${w.map(d => `${fmt(d.predicted)} against ${fmt(d.actual)}`).join(', ')}.</p>
+    <p>Its warnings are worth more than its numbers. Of the ${N(T.flagged)} days it flagged, ${N(T.flagged - T.falseAlarms)} were busier than normal. That is why the <a href="storm-outlook.html">outlook</a> shows warning levels and their track record, not fault counts.</p>`;
+}
+getJSON('data/09-outlook.json?v=2').then(render).catch(e => { $('#out').innerHTML = `<p class="err">The result file could not be loaded: ${esc(e.message)}.</p>`; });
+</script>
+</body>
+</html>
